@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { HeaderBar } from "./components/HeaderBar";
+import { VerseNavigator } from "./components/VerseNavigator";
 import { EditorModal, TabConfig } from "./components/EditorModal";
 import { VerseTab } from "./components/VerseTab";
 import { AuthModal } from "./components/AuthModal";
+import { CommandPalette } from "./components/CommandPalette";
 import { useAuth } from "./context/AuthContext";
 import { useAutosave } from "./hooks/useAutosave";
 import { API_BASE_URL, apiClient, formatError } from "./lib/apiClient";
@@ -11,6 +13,7 @@ import {
   ReviewState,
   SavePayload,
   VerseDraft,
+  VerseListItem,
   WorkDetail,
   WorkSummary,
 } from "./lib/types";
@@ -20,23 +23,41 @@ interface SaveOptions {
   advance?: boolean;
 }
 
+const REQUIRED_LANGS = ["bn", "en", "or", "hi", "as"] as const;
+
 const AUTOSAVE_INTERVAL = 30_000;
 
 const DEFAULT_TABS: TabConfig[] = [
   { key: "verse", label: "Verse" },
-  { key: "translations", label: "Translations", disabled: true },
-  { key: "segments", label: "Segments", disabled: true },
-  { key: "origin", label: "Origin", disabled: true },
-  { key: "commentary", label: "Commentary", disabled: true },
-  { key: "review", label: "Review", disabled: true },
-  { key: "history", label: "History", disabled: true },
-  { key: "preview", label: "Preview", disabled: true },
+  { key: "translations", label: "Translations" },
+  { key: "segments", label: "Segments" },
+  { key: "origin", label: "Origin" },
+  { key: "commentary", label: "Commentary" },
+  { key: "review", label: "Review" },
+  { key: "history", label: "History" },
+  { key: "preview", label: "Preview" },
+  { key: "attachments", label: "Attachments" },
 ];
 
 const STATUS_DEFAULT: ReviewState = "draft";
 
 function buildInitialDraft(work: WorkDetail | null): VerseDraft {
   const canonicalLang = work?.canonical_lang ?? "bn";
+  const languageSet = new Set<string>([
+    canonicalLang,
+    "en",
+    ...REQUIRED_LANGS,
+    ...(work?.langs ?? []),
+  ]);
+  const languages = Array.from(languageSet);
+
+  const initialTexts: Record<string, string> = {};
+  const initialSegments: Record<string, string[]> = {};
+  languages.forEach((lang) => {
+    initialTexts[lang] = "";
+    initialSegments[lang] = [];
+  });
+
   const origin: OriginEntry[] =
     work?.source_editions?.length && work.source_editions[0]
       ? [
@@ -52,13 +73,14 @@ function buildInitialDraft(work: WorkDetail | null): VerseDraft {
     verseId: undefined,
     manualNumber: "",
     systemOrder: null,
-    texts: {
-      [canonicalLang]: "",
-      en: "",
-    },
+    texts: initialTexts,
+    segments: initialSegments,
     tags: [],
     origin,
     status: STATUS_DEFAULT,
+    commentary: [],
+    history: [],
+    attachments: [],
   };
 }
 
@@ -85,6 +107,12 @@ export default function App() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [bannerMessage, setBannerMessage] = useState<string | null>(null);
   const [isAuthModalOpen, setAuthModalOpen] = useState(false);
+  const [isPaletteOpen, setPaletteOpen] = useState(false);
+  const [paletteQuery, setPaletteQuery] = useState("");
+  const [verseList, setVerseList] = useState<VerseListItem[]>([]);
+  const [listLoading, setListLoading] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [pagination, setPagination] = useState({ offset: 0, limit: 20, total: 0 });
   const [connection, setConnection] = useState({
     healthy: null as boolean | null,
     checking: true,
@@ -145,9 +173,102 @@ export default function App() {
     [],
   );
 
+  const loadVerseList = useCallback(
+    async (options?: { offset?: number; query?: string }) => {
+      if (!selectedWorkId) {
+        return;
+      }
+      const offset = options?.offset ?? 0;
+      const query = options?.query ?? searchTerm;
+      setListLoading(true);
+      try {
+        const response = await apiClient.get<{ items: VerseListItem[]; next: { offset: number; limit: number } | null; total: number }>(
+          `/works/${selectedWorkId}/verses`,
+          { params: { offset, limit: pagination.limit, q: query || undefined } },
+        );
+        setVerseList(response.data.items ?? []);
+        const total = response.data.total ?? response.data.items?.length ?? 0;
+        setPagination((prev) => ({ offset, limit: prev.limit, total }));
+      } catch (error) {
+        setVerseList([]);
+        setBannerMessage(`Failed to load verses: ${formatError(error)}`);
+      } finally {
+        setListLoading(false);
+      }
+    },
+    [selectedWorkId, pagination.limit, searchTerm],
+  );
+
+  const loadVerseDetail = useCallback(
+    async (verseId: string) => {
+      if (!selectedWorkId) {
+        return;
+      }
+      try {
+        const response = await apiClient.get(`/works/${selectedWorkId}/verses/${verseId}`);
+        const verse = response.data as any;
+        const languages = Array.from(
+          new Set<string>([
+            ...REQUIRED_LANGS,
+            ...(workDetail?.langs ?? []),
+            ...(Object.keys(verse?.texts ?? {}) as string[]),
+          ]),
+        );
+        const textMap: Record<string, string> = {};
+        languages.forEach((lang) => {
+          const value = verse?.texts?.[lang];
+          textMap[lang] = value ?? "";
+        });
+        const segments: Record<string, string[]> = {};
+        languages.forEach((lang) => {
+          const rawSegments = verse?.segments?.[lang];
+          segments[lang] = Array.isArray(rawSegments) ? rawSegments : [];
+        });
+        const history = verse?.review?.history ?? [];
+        setVerseDraft({
+          verseId: verse?.verse_id ?? verseId,
+          manualNumber: verse?.number_manual ?? "",
+          systemOrder: verse?.order ?? null,
+          texts: textMap,
+          segments,
+          tags: verse?.tags ?? [],
+          origin: verse?.origin ?? [],
+          status: verse?.review?.state ?? STATUS_DEFAULT,
+          commentary: verse?.commentary ?? [],
+          history,
+          attachments: verse?.attachments ?? [],
+        });
+        setDirty(false);
+        setErrorMessage(null);
+        setLastSavedAt(null);
+      } catch (error) {
+        setBannerMessage(`Failed to load verse: ${formatError(error)}`);
+      }
+    },
+    [selectedWorkId, workDetail],
+  );
+
   useEffect(() => {
     void fetchWorks();
   }, [fetchWorks]);
+  useEffect(() => {
+    const handler = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setPaletteQuery((current) => (current ? current : searchTerm));
+        setPaletteOpen(true);
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [searchTerm]);
+
+  useEffect(() => {
+    if (!isPaletteOpen) {
+      setPaletteQuery("");
+    }
+  }, [isPaletteOpen]);
+
 
   useEffect(() => {
     void pingConnection();
@@ -160,8 +281,60 @@ export default function App() {
   useEffect(() => {
     if (selectedWorkId) {
       void fetchWorkDetail(selectedWorkId);
+      void loadVerseList({ offset: 0 });
+    } else {
+      setVerseList([]);
+      setPagination((prev) => ({ ...prev, offset: 0, total: 0 }));
     }
-  }, [selectedWorkId, fetchWorkDetail]);
+  }, [selectedWorkId, fetchWorkDetail, loadVerseList]);
+
+  const handleSearch = useCallback(
+    (term: string) => {
+      setSearchTerm(term);
+      void loadVerseList({ offset: 0, query: term });
+    },
+    [loadVerseList],
+  );
+
+  const handlePageChange = useCallback(
+    (nextOffset: number) => {
+      if (nextOffset < 0) {
+        nextOffset = 0;
+      }
+      void loadVerseList({ offset: nextOffset });
+    },
+    [loadVerseList],
+  );
+
+  const handleVerseSelect = useCallback(
+    (verseId: string | null) => {
+      if (verseId) {
+        void loadVerseDetail(verseId);
+        return;
+      }
+      const nextDraft = buildInitialDraft(workDetail);
+      setVerseDraft(nextDraft);
+      setDirty(false);
+      setLastSavedAt(null);
+      setErrorMessage(null);
+    },
+    [loadVerseDetail, workDetail],
+  );
+
+  const openCommandPalette = useCallback(() => {
+    setPaletteQuery(searchTerm);
+    setPaletteOpen(true);
+    handleSearch(searchTerm);
+  }, [searchTerm, handleSearch]);
+
+  const handleCommandSelect = useCallback(
+    (verseId: string) => {
+      handleVerseSelect(verseId);
+      setPaletteOpen(false);
+      setPaletteQuery("");
+    },
+    [handleVerseSelect],
+  );
 
   const setDraft = useCallback((updater: (prev: VerseDraft) => VerseDraft) => {
     setVerseDraft((prev) => {
@@ -177,13 +350,22 @@ export default function App() {
   };
 
   const handleTextChange = (lang: string, value: string) => {
-    setDraft((prev) => ({
-      ...prev,
-      texts: {
-        ...prev.texts,
-        [lang]: value,
-      },
-    }));
+    setDraft((prev) => {
+      const languageUniverse = Array.from(
+        new Set<string>([...REQUIRED_LANGS, ...(workDetail?.langs ?? [])]),
+      );
+      const nextTexts: Record<string, string> = { ...prev.texts };
+      languageUniverse.forEach((item) => {
+        if (!(item in nextTexts)) {
+          nextTexts[item] = "";
+        }
+      });
+      nextTexts[lang] = value;
+      return {
+        ...prev,
+        texts: nextTexts,
+      };
+    });
   };
 
   const handleTagsChange = (tags: string[]) => {
@@ -215,23 +397,49 @@ export default function App() {
         return null;
       }
 
+      const textPayload: Record<string, string | null> = {};
+      Object.entries(verseDraft.texts).forEach(([lang, value]) => {
+        const trimmed = value?.trim() ?? "";
+        textPayload[lang] = trimmed.length ? trimmed : null;
+      });
+
+      const segmentPayload: Record<string, string[]> = {};
+      Object.entries(verseDraft.segments ?? {}).forEach(([lang, entries]) => {
+        const sanitized = (entries ?? []).map((item) => item.trim()).filter(Boolean);
+        if (sanitized.length) {
+          segmentPayload[lang] = sanitized;
+        }
+      });
+
+      const languageUniverse = Array.from(
+        new Set<string>([...REQUIRED_LANGS, ...(workDetail?.langs ?? [])]),
+      );
+      languageUniverse.forEach((lang) => {
+        if (!(lang in textPayload)) {
+          textPayload[lang] = null;
+        }
+        if (!(lang in segmentPayload)) {
+          segmentPayload[lang] = [];
+        }
+      });
+
       return {
         number_manual: manualNumber,
-      texts: {
-        ...verseDraft.texts,
-      },
-      origin: verseDraft.origin.length
-        ? verseDraft.origin
-        : [
-            {
-              edition: workDetail.source_editions[0]?.id ?? "UNKNOWN",
-              page: 1,
-              para_index: 1,
-            },
-          ],
-      tags: verseDraft.tags,
-    };
-  },
+        texts: textPayload,
+        origin: verseDraft.origin.length
+          ? verseDraft.origin
+          : [
+              {
+                edition: workDetail.source_editions[0]?.id ?? "UNKNOWN",
+                page: 1,
+                para_index: 1,
+              },
+            ],
+        tags: verseDraft.tags,
+        segments: segmentPayload,
+        attachments: verseDraft.attachments,
+      };
+    },
     [verseDraft, workDetail],
   );
 
@@ -249,6 +457,7 @@ export default function App() {
       setIsSaving(true);
       setErrorMessage(null);
       try {
+        let savedVerseId = verseDraft.verseId;
         if (verseDraft.verseId) {
           await apiClient.put(
             `/works/${selectedWorkId}/verses/${verseDraft.verseId}`,
@@ -261,6 +470,7 @@ export default function App() {
           );
           const verseId = response.data?.verse_id as string | undefined;
           if (verseId) {
+            savedVerseId = verseId;
             setVerseDraft((prev) => ({ ...prev, verseId }));
           }
         }
@@ -271,6 +481,10 @@ export default function App() {
           setBannerMessage("Verse saved successfully.");
         }
 
+        if (!options?.silent) {
+          void loadVerseList({ offset: pagination.offset, query: searchTerm });
+        }
+
         if (options?.advance) {
           setVerseDraft((prev) => ({
             ...buildInitialDraft(workDetail),
@@ -278,6 +492,8 @@ export default function App() {
           }));
           setLastSavedAt(null);
           setDirty(false);
+        } else if (savedVerseId && !options?.silent) {
+          void loadVerseDetail(savedVerseId);
         }
       } catch (error) {
         const message = formatError(error);
@@ -289,7 +505,7 @@ export default function App() {
         setIsSaving(false);
       }
     },
-    [preparePayload, selectedWorkId, verseDraft.verseId, workDetail],
+    [preparePayload, selectedWorkId, verseDraft.verseId, workDetail, loadVerseList, pagination.offset, searchTerm, loadVerseDetail],
   );
 
   useAutosave(
@@ -320,6 +536,10 @@ export default function App() {
   );
 
   const canonicalLang = workDetail?.canonical_lang ?? "bn";
+  const workLanguages = useMemo(
+    () => Array.from(new Set([...REQUIRED_LANGS, ...(workDetail?.langs ?? [])])),
+    [workDetail?.langs],
+  );
 
   return (
     <div className="min-h-screen bg-slate-950 pb-12">
@@ -339,9 +559,7 @@ export default function App() {
         onValidate={onValidate}
         onApprove={onApprove}
         onReject={onReject}
-        onOpenVerseJump={() =>
-          setBannerMessage("Verse search/jump coming soon.")
-        }
+        onOpenVerseJump={openCommandPalette}
         disableReviewerActions={!user}
       />
 
@@ -361,30 +579,62 @@ export default function App() {
           </div>
         )}
 
-        <EditorModal
-          title={
-            workDetail
-              ? `${workDetail.title.en ?? workDetail.work_id} • Verse Editor`
-              : "Verse Editor"
-          }
-          tabs={DEFAULT_TABS}
-          activeTab={activeTab}
-          onTabChange={setActiveTab}
-        >
-          {activeTab === "verse" ? (
-            <VerseTab
-              draft={verseDraft}
-              canonicalLang={canonicalLang}
-              errorMessage={errorMessage}
-              onManualNumberChange={handleManualNumberChange}
-              onTextChange={handleTextChange}
-              onTagsChange={handleTagsChange}
-            />
-          ) : (
-            <PlaceholderTab label={activeTab} />
-          )}
-        </EditorModal>
+        <div className="mt-6 flex flex-col gap-6 lg:flex-row">
+          <VerseNavigator
+            items={verseList}
+            loading={listLoading}
+            total={pagination.total}
+            offset={pagination.offset}
+            limit={pagination.limit}
+            searchTerm={searchTerm}
+            onSearch={handleSearch}
+            onSelect={handleVerseSelect}
+            selectedVerseId={verseDraft.verseId}
+            onPageChange={handlePageChange}
+            onCreateNew={() => handleVerseSelect(null)}
+          />
+
+          <div className="flex-1">
+            <EditorModal
+              title={
+                workDetail
+                  ? `${workDetail.title.en ?? workDetail.work_id} • Verse Editor`
+                  : "Verse Editor"
+              }
+              tabs={DEFAULT_TABS}
+              activeTab={activeTab}
+              onTabChange={setActiveTab}
+            >
+              {activeTab === "verse" ? (
+                <VerseTab
+                  draft={verseDraft}
+                  canonicalLang={canonicalLang}
+                  workId={workDetail?.work_id ?? ""}
+                  workLangs={workLanguages}
+                  errorMessage={errorMessage}
+                  onManualNumberChange={handleManualNumberChange}
+                  onTextChange={handleTextChange}
+                  onTagsChange={handleTagsChange}
+                />
+              ) : (
+                <PlaceholderTab label={activeTab} />
+              )}
+            </EditorModal>
+          </div>
+        </div>
       </main>
+      <CommandPalette
+        isOpen={isPaletteOpen}
+        query={paletteQuery}
+        items={verseList}
+        loading={listLoading}
+        onQueryChange={(value) => {
+          setPaletteQuery(value);
+          handleSearch(value);
+        }}
+        onClose={() => setPaletteOpen(false)}
+        onSelect={(verseId) => handleCommandSelect(verseId)}
+      />
       <AuthModal
         isOpen={isAuthModalOpen}
         onClose={() => setAuthModalOpen(false)}

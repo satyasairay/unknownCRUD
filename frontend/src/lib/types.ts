@@ -32,9 +32,13 @@ export interface VerseDraft {
   manualNumber: string;
   systemOrder: number | null;
   texts: Record<string, string>;
+  segments: Record<string, string[]>;
   tags: string[];
   origin: OriginEntry[];
   status: ReviewState;
+  commentary: CommentaryEntry[];
+  history: ReviewHistoryEntry[];
+  attachments: AttachmentRef[];
 }
 
 export interface OriginEntry {
@@ -48,6 +52,8 @@ export interface SavePayload {
   texts: Record<string, string | null>;
   origin: OriginEntry[];
   tags: string[];
+  segments: Record<string, string[]>;
+  attachments?: AttachmentRef[];
 }
 
 export interface AuthUser {
@@ -55,4 +61,52 @@ export interface AuthUser {
   email: string;
   roles: string[];
   twoFactorEnabled?: boolean;
+}
+
+export interface VerseListItem {
+  verse_id: string;
+  number_manual?: string | null;
+  review?: {
+    state: ReviewState;
+  };
+  texts?: Record<string, string | null>;
+  tags?: string[];
+}
+
+export interface CommentaryEntry {
+  commentary_id: string;
+  verse_id?: string | null;
+  speaker?: string | null;
+  source?: string | null;
+  genre?: string | null;
+  tags?: string[];
+  texts: Record<string, string | null>;
+  review?: {
+    state: ReviewState;
+  };
+}
+
+export interface ReviewHistoryIssue {
+  path?: string | null;
+  lang?: string | null;
+  problem?: string | null;
+  found?: string | null;
+  expected?: string | null;
+  suggestion?: string | null;
+  severity?: string | null;
+}
+
+export interface AttachmentRef {
+  label: string;
+  url: string;
+  notes?: string | null;
+}
+
+export interface ReviewHistoryEntry {
+  ts: string;
+  actor: string;
+  action: string;
+  from?: string | null;
+  to?: string | null;
+  issues?: ReviewHistoryIssue[];
 }

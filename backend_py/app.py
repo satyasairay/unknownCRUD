@@ -4,7 +4,7 @@ import hashlib
 import secrets
 import uuid
 from datetime import datetime, timezone
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from fastapi import Cookie, Depends, FastAPI, HTTPException, Query, Response, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -110,6 +110,38 @@ SESSION_COOKIE_PARAMS = {
     "path": "/",
     "max_age": 60 * 60 * 24,
 }
+
+LANG_FALLBACKS = ["bn", "en", "or", "hi", "as"]
+
+
+def _expected_languages(work: Work) -> List[str]:
+    languages: List[str] = []
+    for lang in (work.langs or []):
+        if lang not in languages:
+            languages.append(lang)
+    for lang in LANG_FALLBACKS:
+        if lang not in languages:
+            languages.append(lang)
+    return languages
+
+
+def _normalize_language_fields(work: Work, verse_dict: Dict[str, Any]) -> Dict[str, Any]:
+    expected = _expected_languages(work)
+    texts = verse_dict.get("texts") or {}
+    segments = verse_dict.get("segments") or {}
+    hashes = verse_dict.get("hash") or {}
+
+    verse_dict["texts"] = {lang: texts.get(lang) for lang in expected}
+    verse_dict["segments"] = {
+        lang: list(segments.get(lang) or []) for lang in expected
+    }
+    verse_dict["hash"] = {lang: hashes.get(lang) for lang in expected}
+    return verse_dict
+
+
+def _normalize_verse_model(work: Work, verse: Verse) -> Verse:
+    normalized = _normalize_language_fields(work, verse.dict(by_alias=True))
+    return Verse.parse_obj(normalized)
 
 
 def hash_password(password: str) -> str:
@@ -253,10 +285,10 @@ def create_app() -> FastAPI:
         limit: int = Query(20, ge=1, le=100),
     ) -> Dict[str, object]:
         try:
-            storage.load_work(work_id)
+            work = storage.load_work(work_id)
         except FileNotFoundError:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Work not found")
-        verses = storage.list_verses(work_id)
+        verses = [_normalize_verse_model(work, verse) for verse in storage.list_verses(work_id)]
         total = len(verses)
         slice_end = min(offset + limit, total)
         items = [verse.dict(by_alias=True) for verse in verses[offset:slice_end]]
@@ -267,7 +299,9 @@ def create_app() -> FastAPI:
     @app.get("/works/{work_id}/verses/{verse_id}", response_model=Verse)
     def get_verse(work_id: str, verse_id: str) -> Verse:
         try:
-            return storage.load_verse(work_id, verse_id)
+            work = storage.load_work(work_id)
+            verse = storage.load_verse(work_id, verse_id)
+            return _normalize_verse_model(work, verse)
         except FileNotFoundError:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Verse not found")
 
@@ -287,7 +321,11 @@ def create_app() -> FastAPI:
                 detail="duplicate manual number",
             )
         verse_id, order = storage.generate_verse_id(work_id)
-        segments = payload.segments or {lang: [] for lang in work.langs}
+        expected_langs = _expected_languages(work)
+        incoming_texts = payload.texts or {}
+        normalized_texts = {lang: incoming_texts.get(lang) for lang in expected_langs}
+        segments_payload = payload.segments or {}
+        normalized_segments = {lang: list(segments_payload.get(lang) or []) for lang in expected_langs}
         meta = payload.meta or {}
         meta.setdefault("entered_by", user.email)
         verse = Verse(
@@ -295,14 +333,15 @@ def create_app() -> FastAPI:
             verse_id=verse_id,
             number_manual=payload.number_manual,
             order=order,
-            texts=payload.texts,
-            segments=segments,
+            texts=normalized_texts,
+            segments=normalized_segments,
             origin=[entry.dict(by_alias=True) for entry in payload.origin],
             tags=payload.tags,
             review=ReviewBlock(),
             meta=meta,
-            hash={lang: None for lang in work.langs},
+            hash={lang: None for lang in expected_langs},
         )
+        verse = _normalize_verse_model(work, verse)
         storage.save_verse(verse)
         return {"verse_id": verse_id, "location": f"/works/{work_id}/verses/{verse_id}"}
 
@@ -313,6 +352,10 @@ def create_app() -> FastAPI:
         payload: VerseUpdateRequest,
         user: User = Depends(get_current_user),
     ) -> Verse:
+        try:
+            work = storage.load_work(work_id)
+        except FileNotFoundError:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Work not found")
         try:
             verse = storage.load_verse(work_id, verse_id)
         except FileNotFoundError:
@@ -337,7 +380,9 @@ def create_app() -> FastAPI:
             meta = data.get("meta", {})
             meta.update(payload.meta)
             data["meta"] = meta
+        data = _normalize_language_fields(work, data)
         updated = Verse.parse_obj(data)
+        updated = _normalize_verse_model(work, updated)
         storage.save_verse(updated)
         return updated
 
@@ -453,6 +498,7 @@ def create_app() -> FastAPI:
         work = storage.load_work(payload.work_id)
         _validate_ready_for_approval(work, verse)
         entry = _transition_review(verse.review, "approved", user.email, "state_change")
+        verse = _normalize_verse_model(work, verse)
         storage.save_verse(verse)
         storage.append_review_log("verse", payload.work_id, verse_id, _serialize_history_entry(entry))
         return verse
@@ -464,8 +510,10 @@ def create_app() -> FastAPI:
         user: User = Depends(get_current_user),
     ) -> Verse:
         verse = storage.load_verse(payload.work_id, verse_id)
+        work = storage.load_work(payload.work_id)
         issues = payload.issues or []
         entry = _transition_review(verse.review, "rejected", user.email, "issue_add", issues=issues)
+        verse = _normalize_verse_model(work, verse)
         storage.save_verse(verse)
         storage.append_review_log("verse", payload.work_id, verse_id, _serialize_history_entry(entry))
         return verse
@@ -477,7 +525,9 @@ def create_app() -> FastAPI:
         user: User = Depends(get_current_user),
     ) -> Verse:
         verse = storage.load_verse(payload.work_id, verse_id)
+        work = storage.load_work(payload.work_id)
         entry = _transition_review(verse.review, "flagged", user.email, "flag")
+        verse = _normalize_verse_model(work, verse)
         storage.save_verse(verse)
         storage.append_review_log("verse", payload.work_id, verse_id, _serialize_history_entry(entry))
         return verse
@@ -489,7 +539,9 @@ def create_app() -> FastAPI:
         user: User = Depends(get_current_user),
     ) -> Verse:
         verse = storage.load_verse(payload.work_id, verse_id)
+        work = storage.load_work(payload.work_id)
         entry = _transition_review(verse.review, "locked", user.email, "lock")
+        verse = _normalize_verse_model(work, verse)
         storage.save_verse(verse)
         storage.append_review_log("verse", payload.work_id, verse_id, _serialize_history_entry(entry))
         return verse
