@@ -1,0 +1,59 @@
+{
+  "type": "verse",
+  "work_id": "satyanusaran",
+  "verse_id": "V0001",
+  "number_manual": "1",
+  "order": 1,
+  "number_generated": null,
+  "texts": {
+    "bn": "মানব হৃদয়ে সত্যের অনুসন্ধানেই জীবনের সার্থকতা।",
+    "en": "The fulfillment of life is the quest for truth within the human heart."
+  },
+  "segments": {
+    "bn": [],
+    "en": []
+  },
+  "origin": [
+    {
+      "edition": "ED-PDF-BN-01",
+      "page": 1,
+      "para_index": 1
+    },
+    {
+      "edition": "ED-PDF-EN-01",
+      "page": 1,
+      "para_index": 1
+    }
+  ],
+  "tags": [
+    "philosophy",
+    "intro"
+  ],
+  "hash": {
+    "bn": null,
+    "en": null
+  },
+  "meta": {
+    "entered_by": "seed@unknown-crud.local"
+  },
+  "review": {
+    "state": "approved",
+    "required_reviewers": [
+      "editor",
+      "linguist",
+      "final"
+    ],
+    "history": [
+      {
+        "ts": "2025-10-21T07:39:16.606726+00:00",
+        "actor": "seed@unknown-crud.local",
+        "action": "state_change",
+        "from": "draft",
+        "to": "approved",
+        "issues": [],
+        "hash_before": null,
+        "hash_after": null
+      }
+    ]
+  }
+}

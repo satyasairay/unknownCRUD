@@ -1,0 +1,47 @@
+{
+  "type": "verse",
+  "work_id": "satyanusaran",
+  "verse_id": "V0002",
+  "number_manual": "2",
+  "order": 2,
+  "number_generated": null,
+  "texts": {
+    "bn": "যে প্রেম সত্যে স্থিত, সে প্রেমেই সকলের মুক্তি।",
+    "en": "Only love rooted in truth can liberate all beings."
+  },
+  "segments": {
+    "bn": [],
+    "en": []
+  },
+  "origin": [
+    {
+      "edition": "ED-PDF-BN-01",
+      "page": 1,
+      "para_index": 2
+    },
+    {
+      "edition": "ED-PDF-EN-01",
+      "page": 1,
+      "para_index": 2
+    }
+  ],
+  "tags": [
+    "love"
+  ],
+  "hash": {
+    "bn": null,
+    "en": null
+  },
+  "meta": {
+    "entered_by": "seed@unknown-crud.local"
+  },
+  "review": {
+    "state": "review_pending",
+    "required_reviewers": [
+      "editor",
+      "linguist",
+      "final"
+    ],
+    "history": []
+  }
+}

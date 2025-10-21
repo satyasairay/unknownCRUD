@@ -1,0 +1,36 @@
+{
+  "work_id": "satyanusaran",
+  "title": {
+    "bn": "সত্যানুসরণ",
+    "en": "Satyanusaran"
+  },
+  "author": "Sree Sree Thakur",
+  "canonical_lang": "bn",
+  "langs": [
+    "bn",
+    "en"
+  ],
+  "structure": {
+    "unit": "verse",
+    "numbering": "sequential"
+  },
+  "source_editions": [
+    {
+      "id": "ED-PDF-BN-01",
+      "lang": "bn",
+      "type": "pdf",
+      "provenance": "personal_copy"
+    },
+    {
+      "id": "ED-PDF-EN-01",
+      "lang": "en",
+      "type": "pdf",
+      "provenance": "personal_copy"
+    }
+  ],
+  "policy": {
+    "sacred": "True",
+    "monetization": "forbidden",
+    "truthfulness": "never attribute words to Thakur without source"
+  }
+}

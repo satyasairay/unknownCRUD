@@ -1,0 +1,43 @@
+{
+  "type": "commentary",
+  "commentary_id": "C-SATYA-V0001-0001",
+  "work_id": "satyanusaran",
+  "verse_id": "V0001",
+  "targets": [
+    {
+      "kind": "verse",
+      "ids": [
+        "V0001"
+      ]
+    }
+  ],
+  "speaker": "P-DESC-05",
+  "source": "S-FOREWORD-2022",
+  "date": {
+    "iso": "2022-08-15"
+  },
+  "genre": "interpretation",
+  "tags": [
+    "reflection"
+  ],
+  "texts": {
+    "bn": "সত্যের পথ প্রেমেই উন্মোচিত হয়, তাই হৃদয়কে প্রেমে পূর্ণ করো।",
+    "en": "Let the heart be filled with love, for truth reveals itself through love."
+  },
+  "authenticity": {
+    "status": "attested",
+    "confidence": "0.9"
+  },
+  "priority": {
+    "lineage_bias": 1.0
+  },
+  "review": {
+    "state": "review_pending",
+    "required_reviewers": [
+      "editor",
+      "linguist",
+      "final"
+    ],
+    "history": []
+  }
+}
