@@ -1,0 +1,31 @@
+# Python artifacts
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.venv/
+env/
+venv/
+
+# Node/Vite artifacts
+node_modules/
+dist/
+build/
+.parcel-cache/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Logs and coverage
+*.log
+coverage/
+
+# OS/Editor cruft
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/
