@@ -3,6 +3,8 @@
 | Date       | Build | Area                 | Steps to Reproduce                                               | Expected                                                                   | Actual                                                    | Artifacts / Paths                    | Decision / Patch             | Status  |
 | ---------- | ----- | -------------------- | ---------------------------------------------------------------- | -------------------------------------------------------------------------- | --------------------------------------------------------- | ------------------------------------ | ---------------------------- | ------- |
 | 2025-10-22 | P0    | Docs / Repo Scaffold | Ran Codex P0 prompt to create project scaffold and starter files | All base folders, .gitignore, README, env examples, and docs index created | Structure generated exactly as defined; verified manually | E:/SATYASAI_RAY/unknown-crud-library | Accepted, baseline confirmed | ✅ Fixed |
+| 2025-10-21 | P1    | Backend / FastAPI Scaffold | Run `uvicorn backend_py.app:app --reload`; execute pytest E2E (`register → login → create verse → approve → export`). | All routes respond per `api_contracts.md`; export artifacts generated under `data/library/.../export/`. | All CRUD and export routes operational; E2E green; minor Pydantic warnings only. | `/backend_py/app.py`, `/data/library/satyanusaran/export/` | Accepted, backend baseline complete | ✅ Fixed |
+
 
 ---
 

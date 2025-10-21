@@ -1,8 +1,8 @@
 # Change Log — Unknown CRUD Library (v1)
 
-| Date | Version | Description | Reason / Context | Approved By |
-| ---- | ------- | ----------- | ---------------- | ----------- |
-|      |         |             |                  |             |
+| Date       | Version | Description                                                                                       | Reason / Context                              | Approved By |
+| ---------- | ------- | ------------------------------------------------------------------------------------------------- | --------------------------------------------- | ----------- |
+| 2025-10-21 | v0.2-P1 | Implemented FastAPI backend scaffold with JSON-on-disk CRUD, review, build/export, and E2E tests. | Phase 2 (P1) completion per `prompt_pack.md`. | Satyasai Ray       |
 
 ---
 
