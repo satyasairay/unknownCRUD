@@ -5,6 +5,8 @@
 | 2025-10-22 | P0    | Docs / Repo Scaffold | Ran Codex P0 prompt to create project scaffold and starter files | All base folders, .gitignore, README, env examples, and docs index created | Structure generated exactly as defined; verified manually | E:/SATYASAI_RAY/unknown-crud-library | Accepted, baseline confirmed | ✅ Fixed |
 | 2025-10-21 | P1    | Backend / FastAPI Scaffold | Run `uvicorn backend_py.app:app --reload`; execute pytest E2E (`register → login → create verse → approve → export`). | All routes respond per `api_contracts.md`; export artifacts generated under `data/library/.../export/`. | All CRUD and export routes operational; E2E green; minor Pydantic warnings only. | `/backend_py/app.py`, `/data/library/satyanusaran/export/` | Accepted, backend baseline complete | ✅ Fixed |
 | 2025-10-21 | P1a   | Seed & Sample Data | Run `python -m scripts.seed_data`; start API; GET `/works`, `/works/:id`, `/works/:id/verses`; approve `V0001`; run exports. | Seed creates `work.json`, `V0001`, `V0002`, and one commentary; re-runs skip existing files; exports succeed. | Seed idempotent; routes return seeded data; approve OK; build/clean/train artifacts present. | `data/library/satyanusaran/**`, `export/*.json(l)`, `build/*.json`; `scripts/seed_data.py` | Accepted; baseline sample set confirmed. | ✅ Fixed |
+| 2025-10-21 | P1b   | Backend / CORS & Cookies | Run backend; test preflight and session cookie via curl or browser; rerun pytest E2E. | CORS headers allow `http://localhost:5173` with credentials; cookies persist; all tests pass. | Verified headers and cookie persistence; pytest suite green; ready for React integration. | `backend_py/app.py` (CORS + session setup) | Accepted; backend ready for frontend bridge. | ✅ Fixed |
+
 
 
 ---

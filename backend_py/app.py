@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
 from fastapi import Cookie, Depends, FastAPI, HTTPException, Response, status
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, EmailStr, Field
 
 from .models import (
@@ -100,6 +101,16 @@ class ExportResponse(BaseModel):
 sessions: Dict[str, str] = {}
 csrf_token = secrets.token_urlsafe(32)
 
+ALLOWED_ORIGINS = ["http://localhost:5173"]
+SESSION_COOKIE_NAME = "session_id"
+SESSION_COOKIE_PARAMS = {
+    "httponly": True,
+    "secure": False,  # Use True when serving over HTTPS.
+    "samesite": "none",
+    "path": "/",
+    "max_age": 60 * 60 * 24,
+}
+
 
 def hash_password(password: str) -> str:
     return hashlib.sha256(password.encode("utf-8")).hexdigest()
@@ -131,7 +142,9 @@ def update_user(user: User) -> None:
     storage.save_users(users)
 
 
-async def get_current_user(session_id: Optional[str] = Cookie(default=None)) -> User:
+async def get_current_user(
+    session_id: Optional[str] = Cookie(default=None, alias=SESSION_COOKIE_NAME)
+) -> User:
     if not session_id:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
     user_id = sessions.get(session_id)
@@ -145,6 +158,14 @@ async def get_current_user(session_id: Optional[str] = Cookie(default=None)) -> 
 
 def create_app() -> FastAPI:
     app = FastAPI(title="Unknown CRUD Library API", version="v1")
+
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=ALLOWED_ORIGINS,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
     @app.get("/health")
     def health() -> Dict[str, str]:
@@ -175,21 +196,22 @@ def create_app() -> FastAPI:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
         session_id = secrets.token_urlsafe(32)
         sessions[session_id] = user.id
-        response.set_cookie(
-            "session_id",
-            session_id,
-            httponly=True,
-            secure=False,
-            samesite="lax",
-        )
+        response.set_cookie(SESSION_COOKIE_NAME, session_id, **SESSION_COOKIE_PARAMS)
         return serialize_user(user)
 
     @app.post("/auth/logout", status_code=status.HTTP_204_NO_CONTENT)
-    def logout(response: Response, session_id: Optional[str] = Cookie(default=None)) -> Response:
+    def logout(
+        response: Response,
+        session_id: Optional[str] = Cookie(default=None, alias=SESSION_COOKIE_NAME),
+    ) -> Response:
         if session_id and session_id in sessions:
             sessions.pop(session_id)
         if response:
-            response.delete_cookie("session_id")
+            response.delete_cookie(
+                SESSION_COOKIE_NAME,
+                path=SESSION_COOKIE_PARAMS.get("path", "/"),
+                samesite=SESSION_COOKIE_PARAMS.get("samesite", "lax"),
+            )
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     @app.get("/me", response_model=AuthResponse)
