@@ -2,8 +2,10 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { HeaderBar } from "./components/HeaderBar";
 import { EditorModal, TabConfig } from "./components/EditorModal";
 import { VerseTab } from "./components/VerseTab";
+import { AuthModal } from "./components/AuthModal";
+import { useAuth } from "./context/AuthContext";
 import { useAutosave } from "./hooks/useAutosave";
-import { apiClient, formatError } from "./lib/apiClient";
+import { API_BASE_URL, apiClient, formatError } from "./lib/apiClient";
 import {
   OriginEntry,
   ReviewState,
@@ -82,6 +84,33 @@ export default function App() {
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [bannerMessage, setBannerMessage] = useState<string | null>(null);
+  const [isAuthModalOpen, setAuthModalOpen] = useState(false);
+  const [connection, setConnection] = useState({
+    healthy: null as boolean | null,
+    checking: true,
+    baseUrl: API_BASE_URL,
+  });
+
+  const { user, logout } = useAuth();
+
+  const handleLogout = useCallback(async () => {
+    try {
+      await logout();
+      setBannerMessage("Signed out successfully.");
+    } catch (error) {
+      setBannerMessage(`Logout failed: ${formatError(error)}`);
+    }
+  }, [logout]);
+
+  const pingConnection = useCallback(async () => {
+    setConnection((prev) => ({ ...prev, checking: true }));
+    try {
+      await apiClient.get("/health", { timeout: 5000 });
+      setConnection({ healthy: true, checking: false, baseUrl: API_BASE_URL });
+    } catch {
+      setConnection({ healthy: false, checking: false, baseUrl: API_BASE_URL });
+    }
+  }, []);
 
   const fetchWorks = useCallback(async () => {
     try {
@@ -119,6 +148,14 @@ export default function App() {
   useEffect(() => {
     void fetchWorks();
   }, [fetchWorks]);
+
+  useEffect(() => {
+    void pingConnection();
+    const id = window.setInterval(() => {
+      void pingConnection();
+    }, 20_000);
+    return () => window.clearInterval(id);
+  }, [pingConnection]);
 
   useEffect(() => {
     if (selectedWorkId) {
@@ -293,6 +330,10 @@ export default function App() {
         status={verseDraft.status}
         isSaving={isSaving}
         lastSavedAt={formattedSavedAt}
+        connection={connection}
+        userEmail={user?.email ?? null}
+        onLoginClick={() => setAuthModalOpen(true)}
+        onLogoutClick={() => void handleLogout()}
         onSave={() => void handleSave()}
         onSaveNext={handleSaveAndNext}
         onValidate={onValidate}
@@ -301,6 +342,7 @@ export default function App() {
         onOpenVerseJump={() =>
           setBannerMessage("Verse search/jump coming soon.")
         }
+        disableReviewerActions={!user}
       />
 
       <main className="mx-auto max-w-7xl px-6">
@@ -343,6 +385,10 @@ export default function App() {
           )}
         </EditorModal>
       </main>
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        onClose={() => setAuthModalOpen(false)}
+      />
     </div>
   );
 }

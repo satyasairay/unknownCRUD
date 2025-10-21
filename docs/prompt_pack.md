@@ -48,6 +48,107 @@ Add `/frontend/.env.development` with `VITE_API_BASE=http://localhost:4000`.
 Axios client must read `import.meta.env.VITE_API_BASE`.
 Add quick “Connection status” chip in the header that pings `/health`.
 
+### P3a - Frontend Env, Base URL **+ Auth UI (Login/Register/Logout)** Refined on 21-10-2025 as we wanted to patch in Home page, login , register and logout UIs in this stage.
+
+**Do not duplicate existing files** created in P3; **modify in place** where noted.
+
+## Goals
+
+1. Wire frontend env for API base + connection chip (as already planned).
+2. Add a minimal, production-ready **Auth flow**: **Login**, **Register**, **Logout** using backend endpoints from `docs/api_contracts.md`.
+3. Respect cookie sessions (no tokens in localStorage).
+4. Guard action buttons by auth state (basic).
+
+## Env & Config (extend if missing)
+
+* Create/ensure: `/frontend/.env.development`
+
+  ```
+  VITE_API_BASE=http://localhost:4000
+  ```
+* Update `/frontend/src/lib/apiClient.ts`:
+
+  * `axios.create({ baseURL: import.meta.env.VITE_API_BASE, withCredentials: true })`
+  * Add `getCsrf()` util → `GET /auth/csrf` (store token in memory) and **axios request interceptor** to set `x-csrf-token` for state-changing verbs.
+
+## Auth State (new)
+
+* **`/frontend/src/context/AuthContext.tsx`** (new):
+
+  * `AuthProvider` with state `{ user, loading }`.
+  * Effects:
+
+    * on mount → `GET /me` → set `user` or `null`.
+  * Actions:
+
+    * `register({email,password,roles})` → `POST /auth/register`
+    * `login({email,password,otp?})` → `POST /auth/login`
+    * `logout()` → `POST /auth/logout` → `user=null`
+  * Export `useAuth()` hook.
+* Wrap `<App />` in `AuthProvider` (edit `/frontend/src/main.tsx`).
+
+## UI Components (add, but reuse existing header)
+
+* **`/frontend/src/components/AuthModal.tsx`** (new):
+
+  * Modal with **tabs**: **Login** | **Register**.
+  * Fields:
+
+    * Login: `email`, `password`
+    * Register: `email`, `password` (min 12 chars), `roles` (multi-select; default `["author"]`)
+  * Buttons: **Login**, **Create Account**; show inline errors from API.
+  * On success: close modal; `useAuth()` updates `user`.
+* **Update `/frontend/src/components/HeaderBar.tsx`**:
+
+  * Right side: if `user` → show email + **Logout** button.
+  * If no `user` → show **Login** button (opens `AuthModal`).
+  * Keep existing **Connection status** ping (don’t remove).
+
+## Guarding Actions (small change)
+
+* In `/frontend/src/components/HeaderBar.tsx` and/or `App.tsx`:
+
+  * Disable **Validate / Approve / Reject** when `!user`.
+  * Leave **Save** enabled for now (we’ll add roles later).
+
+## Don’t duplicate existing P3 files
+
+* Reuse existing `apiClient.ts`, `HeaderBar.tsx`, `App.tsx`.
+* Keep autosave logic unchanged (`useAutosave.ts`).
+
+## Minimal Styling
+
+* Tailwind classes consistent with current layout; center modal; inputs with labels; error text small/red.
+
+## Tests / Acceptance
+
+* Build must pass: `cd frontend && npm install && npm run build`
+* Manual acceptance:
+
+  1. Run backend & frontend.
+  2. Open app → click **Login** → create account → auto-login.
+  3. Reload page → still authenticated (`/me` succeeds).
+  4. Click **Logout** → `/me` shows unauthenticated; login button returns.
+  5. Connection chip still pings `/health`.
+
+## Files summary
+
+* **New:**
+
+  * `src/context/AuthContext.tsx`
+  * `src/components/AuthModal.tsx`
+* **Modified:**
+
+  * `src/main.tsx` (wrap with `AuthProvider`)
+  * `src/components/HeaderBar.tsx` (login/logout controls)
+  * `src/lib/apiClient.ts` (CSRF + withCredentials)
+  * `.env.development` (VITE_API_BASE)
+
+## References
+
+* Back-end endpoints already exist per `docs/api_contracts.md`: `/auth/register`, `/auth/login`, `/auth/logout`, `/me`, `/auth/csrf`.
+* Ensure **no duplicate** components or contexts; update existing files instead.
+
 ---
 
 ## P4 — Frontend Features

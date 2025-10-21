@@ -7,5 +7,14 @@
       "string"
     ],
     "twoFactorEnabled": false
+  },
+  {
+    "id": "c7afd3f3-010f-400f-8d5d-e2f64c6f56b1",
+    "email": "test@taapset.com",
+    "password_hash": "221a44fb0941cf01ec016409c7521953cb082f00c5d7d83df4784f250821409a",
+    "roles": [
+      "author"
+    ],
+    "twoFactorEnabled": false
   }
 ]

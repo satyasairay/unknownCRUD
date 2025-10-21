@@ -3,8 +3,10 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { HeaderBar } from "./components/HeaderBar";
 import { EditorModal } from "./components/EditorModal";
 import { VerseTab } from "./components/VerseTab";
+import { AuthModal } from "./components/AuthModal";
+import { useAuth } from "./context/AuthContext";
 import { useAutosave } from "./hooks/useAutosave";
-import { apiClient, formatError } from "./lib/apiClient";
+import { API_BASE_URL, apiClient, formatError } from "./lib/apiClient";
 const AUTOSAVE_INTERVAL = 30_000;
 const DEFAULT_TABS = [
     { key: "verse", label: "Verse" },
@@ -62,6 +64,32 @@ export default function App() {
     const [lastSavedAt, setLastSavedAt] = useState(null);
     const [errorMessage, setErrorMessage] = useState(null);
     const [bannerMessage, setBannerMessage] = useState(null);
+    const [isAuthModalOpen, setAuthModalOpen] = useState(false);
+    const [connection, setConnection] = useState({
+        healthy: null,
+        checking: true,
+        baseUrl: API_BASE_URL,
+    });
+    const { user, logout } = useAuth();
+    const handleLogout = useCallback(async () => {
+        try {
+            await logout();
+            setBannerMessage("Signed out successfully.");
+        }
+        catch (error) {
+            setBannerMessage(`Logout failed: ${formatError(error)}`);
+        }
+    }, [logout]);
+    const pingConnection = useCallback(async () => {
+        setConnection((prev) => ({ ...prev, checking: true }));
+        try {
+            await apiClient.get("/health", { timeout: 5000 });
+            setConnection({ healthy: true, checking: false, baseUrl: API_BASE_URL });
+        }
+        catch {
+            setConnection({ healthy: false, checking: false, baseUrl: API_BASE_URL });
+        }
+    }, []);
     const fetchWorks = useCallback(async () => {
         try {
             const response = await apiClient.get("/works");
@@ -95,6 +123,13 @@ export default function App() {
     useEffect(() => {
         void fetchWorks();
     }, [fetchWorks]);
+    useEffect(() => {
+        void pingConnection();
+        const id = window.setInterval(() => {
+            void pingConnection();
+        }, 20_000);
+        return () => window.clearInterval(id);
+    }, [pingConnection]);
     useEffect(() => {
         if (selectedWorkId) {
             void fetchWorkDetail(selectedWorkId);
@@ -220,9 +255,9 @@ export default function App() {
     };
     const formattedSavedAt = useMemo(() => formatTimestamp(lastSavedAt), [lastSavedAt]);
     const canonicalLang = workDetail?.canonical_lang ?? "bn";
-    return (_jsxs("div", { className: "min-h-screen bg-slate-950 pb-12", children: [_jsx(HeaderBar, { works: works, selectedWorkId: selectedWorkId, onWorkChange: setSelectedWorkId, status: verseDraft.status, isSaving: isSaving, lastSavedAt: formattedSavedAt, onSave: () => void handleSave(), onSaveNext: handleSaveAndNext, onValidate: onValidate, onApprove: onApprove, onReject: onReject, onOpenVerseJump: () => setBannerMessage("Verse search/jump coming soon.") }), _jsxs("main", { className: "mx-auto max-w-7xl px-6", children: [bannerMessage && (_jsx("div", { className: "mt-6 rounded-md border border-slate-700 bg-slate-900 px-4 py-3 text-sm text-slate-200", children: _jsxs("div", { className: "flex items-center justify-between", children: [_jsx("span", { children: bannerMessage }), _jsx("button", { type: "button", className: "text-xs text-slate-400 hover:text-white", onClick: () => setBannerMessage(null), children: "Dismiss" })] }) })), _jsx(EditorModal, { title: workDetail
+    return (_jsxs("div", { className: "min-h-screen bg-slate-950 pb-12", children: [_jsx(HeaderBar, { works: works, selectedWorkId: selectedWorkId, onWorkChange: setSelectedWorkId, status: verseDraft.status, isSaving: isSaving, lastSavedAt: formattedSavedAt, connection: connection, userEmail: user?.email ?? null, onLoginClick: () => setAuthModalOpen(true), onLogoutClick: () => void handleLogout(), onSave: () => void handleSave(), onSaveNext: handleSaveAndNext, onValidate: onValidate, onApprove: onApprove, onReject: onReject, onOpenVerseJump: () => setBannerMessage("Verse search/jump coming soon."), disableReviewerActions: !user }), _jsxs("main", { className: "mx-auto max-w-7xl px-6", children: [bannerMessage && (_jsx("div", { className: "mt-6 rounded-md border border-slate-700 bg-slate-900 px-4 py-3 text-sm text-slate-200", children: _jsxs("div", { className: "flex items-center justify-between", children: [_jsx("span", { children: bannerMessage }), _jsx("button", { type: "button", className: "text-xs text-slate-400 hover:text-white", onClick: () => setBannerMessage(null), children: "Dismiss" })] }) })), _jsx(EditorModal, { title: workDetail
                             ? `${workDetail.title.en ?? workDetail.work_id} • Verse Editor`
-                            : "Verse Editor", tabs: DEFAULT_TABS, activeTab: activeTab, onTabChange: setActiveTab, children: activeTab === "verse" ? (_jsx(VerseTab, { draft: verseDraft, canonicalLang: canonicalLang, errorMessage: errorMessage, onManualNumberChange: handleManualNumberChange, onTextChange: handleTextChange, onTagsChange: handleTagsChange })) : (_jsx(PlaceholderTab, { label: activeTab })) })] })] }));
+                            : "Verse Editor", tabs: DEFAULT_TABS, activeTab: activeTab, onTabChange: setActiveTab, children: activeTab === "verse" ? (_jsx(VerseTab, { draft: verseDraft, canonicalLang: canonicalLang, errorMessage: errorMessage, onManualNumberChange: handleManualNumberChange, onTextChange: handleTextChange, onTagsChange: handleTagsChange })) : (_jsx(PlaceholderTab, { label: activeTab })) })] }), _jsx(AuthModal, { isOpen: isAuthModalOpen, onClose: () => setAuthModalOpen(false) })] }));
 }
 function PlaceholderTab({ label }) {
     return (_jsxs("div", { className: "rounded-md border border-dashed border-slate-700 bg-slate-900/40 px-4 py-14 text-center text-sm text-slate-400", children: [label, " tab coming soon."] }));

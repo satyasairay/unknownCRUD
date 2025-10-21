@@ -7,6 +7,7 @@
 | 2025-10-21 | v0.2-P1b | Enabled CORS with credentials and unified session cookie handling for React dev origin (`localhost:5173`). | Phase 2 (P1b) — Browser auth bridge readiness. | Satyasai Ray       |
 | 2025-10-21 | v0.3-P2 | Added verses pagination with totals, enforced `number_manual` uniqueness on create/update, soft-delete with tombstones, and append-only review ledger. | Phase 2 (P2) — robustness & audit | Satyasai Ray       |
 | 2025-10-21 | v0.4-P3 | Implemented React + Vite + Tailwind frontend scaffold with autosave, header bar, and API wiring. | Phase 3 (Frontend Scaffold) completion per prompt_pack.md. | Satyasai Ray       |
+| 2025-10-21 | v0.4-P3a | Added Auth UI (Login/Register/Logout), CSRF-aware Axios client, AuthContext, and header login/logout with action gating. | Phase 3a (frontend env + auth) completion. | Satya       |
 
 ---
 

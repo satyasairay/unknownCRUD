@@ -49,3 +49,10 @@ export interface SavePayload {
   origin: OriginEntry[];
   tags: string[];
 }
+
+export interface AuthUser {
+  id: string;
+  email: string;
+  roles: string[];
+  twoFactorEnabled?: boolean;
+}
