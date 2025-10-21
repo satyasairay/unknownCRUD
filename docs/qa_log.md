@@ -1,8 +1,8 @@
 # QA Log — Unknown CRUD Library (v1)
 
-| Date | Build | Area                               | Steps to Reproduce | Expected | Actual | Artifacts / Paths | Decision / Patch | Status                  |
-| ---- | ----- | ---------------------------------- | ------------------ | -------- | ------ | ----------------- | ---------------- | ----------------------- |
-|      |       | Backend / Frontend / Data / Export |                    |          |        |                   |                  | Open / Fixed / Deferred |
+| Date       | Build | Area                 | Steps to Reproduce                                               | Expected                                                                   | Actual                                                    | Artifacts / Paths                    | Decision / Patch             | Status  |
+| ---------- | ----- | -------------------- | ---------------------------------------------------------------- | -------------------------------------------------------------------------- | --------------------------------------------------------- | ------------------------------------ | ---------------------------- | ------- |
+| 2025-10-22 | P0    | Docs / Repo Scaffold | Ran Codex P0 prompt to create project scaffold and starter files | All base folders, .gitignore, README, env examples, and docs index created | Structure generated exactly as defined; verified manually | E:/SATYASAI_RAY/unknown-crud-library | Accepted, baseline confirmed | ✅ Fixed |
 
 ---
 
@@ -25,5 +25,6 @@
 
 **Patch Notes**
 
+* **v1.1:** Added P0 QA verification log.
 * **v1.0:** Base QA log structure.
 * **Next planned:** Add severity/risk rating column if QA scale expands.
