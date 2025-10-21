@@ -5,6 +5,7 @@
 | 2025-10-21 | v0.2-P1 | Implemented FastAPI backend scaffold with JSON-on-disk CRUD, review, build/export, and E2E tests. | Phase 2 (P1) completion per `prompt_pack.md`. | Satyasai Ray       |
 | 2025-10-21 | v0.2-P1a | Added deterministic seeding script for `satyanusaran` (2 verses + 1 commentary); idempotent writes. | Phase 2 (P1a) per prompt_pack; enables E2E/local demos. | Satyasai Ray       |
 | 2025-10-21 | v0.2-P1b | Enabled CORS with credentials and unified session cookie handling for React dev origin (`localhost:5173`). | Phase 2 (P1b) — Browser auth bridge readiness. | Satyasai Ray       |
+| 2025-10-21 | v0.3-P2 | Added verses pagination with totals, enforced `number_manual` uniqueness on create/update, soft-delete with tombstones, and append-only review ledger. | Phase 2 (P2) — robustness & audit | Satyasai Ray       |
 
 ---
 

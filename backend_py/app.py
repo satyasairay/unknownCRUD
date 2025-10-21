@@ -6,10 +6,11 @@ import uuid
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
-from fastapi import Cookie, Depends, FastAPI, HTTPException, Response, status
+from fastapi import Cookie, Depends, FastAPI, HTTPException, Query, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, EmailStr, Field
 
+from . import storage
 from .models import (
     Commentary,
     OriginEntry,
@@ -20,7 +21,6 @@ from .models import (
     Verse,
     Work,
 )
-from . import storage
 
 
 class RegisterRequest(BaseModel):
@@ -247,9 +247,22 @@ def create_app() -> FastAPI:
         return payload
 
     @app.get("/works/{work_id}/verses")
-    def list_verses(work_id: str) -> Dict[str, object]:
-        items = [verse.dict(by_alias=True) for verse in storage.list_verses(work_id)]
-        return {"items": items, "next": None}
+    def list_verses(
+        work_id: str,
+        offset: int = Query(0, ge=0),
+        limit: int = Query(20, ge=1, le=100),
+    ) -> Dict[str, object]:
+        try:
+            storage.load_work(work_id)
+        except FileNotFoundError:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Work not found")
+        verses = storage.list_verses(work_id)
+        total = len(verses)
+        slice_end = min(offset + limit, total)
+        items = [verse.dict(by_alias=True) for verse in verses[offset:slice_end]]
+        next_offset = slice_end if slice_end < total else None
+        next_cursor = {"offset": next_offset, "limit": limit} if next_offset is not None else None
+        return {"items": items, "next": next_cursor, "total": total}
 
     @app.get("/works/{work_id}/verses/{verse_id}", response_model=Verse)
     def get_verse(work_id: str, verse_id: str) -> Verse:
@@ -268,9 +281,11 @@ def create_app() -> FastAPI:
             work = storage.load_work(work_id)
         except FileNotFoundError:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Work not found")
-        existing = storage.list_verses(work_id)
-        if any(v.number_manual == payload.number_manual for v in existing):
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="number_manual must be unique")
+        if storage.manual_number_exists(work_id, payload.number_manual):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="duplicate manual number",
+            )
         verse_id, order = storage.generate_verse_id(work_id)
         segments = payload.segments or {lang: [] for lang in work.langs}
         meta = payload.meta or {}
@@ -304,8 +319,11 @@ def create_app() -> FastAPI:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Verse not found")
         data = verse.dict(by_alias=True)
         if payload.number_manual is not None and payload.number_manual != verse.number_manual:
-            if any(v.number_manual == payload.number_manual for v in storage.list_verses(work_id)):
-                raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="number_manual must be unique")
+            if storage.manual_number_exists(work_id, payload.number_manual, exclude=verse_id):
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="duplicate manual number",
+                )
             data["number_manual"] = payload.number_manual
         if payload.texts is not None:
             data["texts"] = payload.texts
@@ -325,7 +343,7 @@ def create_app() -> FastAPI:
 
     @app.delete("/works/{work_id}/verses/{verse_id}", status_code=status.HTTP_204_NO_CONTENT)
     async def delete_verse(work_id: str, verse_id: str, user: User = Depends(get_current_user)) -> Response:
-        storage.delete_verse(work_id, verse_id)
+        storage.delete_verse(work_id, verse_id, actor=user.email)
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     @app.get("/works/{work_id}/commentary/{commentary_id}", response_model=Commentary)
@@ -388,10 +406,16 @@ def create_app() -> FastAPI:
 
     @app.delete("/works/{work_id}/commentary/{commentary_id}", status_code=status.HTTP_204_NO_CONTENT)
     async def delete_commentary(work_id: str, commentary_id: str, user: User = Depends(get_current_user)) -> Response:
-        storage.delete_commentary(work_id, commentary_id)
+        storage.delete_commentary(work_id, commentary_id, actor=user.email)
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 
-    def _transition_review(review: ReviewBlock, new_state: str, actor: str, action: str, issues: Optional[List[ReviewHistoryIssue]] = None) -> ReviewBlock:
+    def _transition_review(
+        review: ReviewBlock,
+        new_state: str,
+        actor: str,
+        action: str,
+        issues: Optional[List[ReviewHistoryIssue]] = None,
+    ) -> ReviewHistoryEntry:
         entry = ReviewHistoryEntry(
             ts=datetime.now(timezone.utc),
             actor=actor,
@@ -403,7 +427,13 @@ def create_app() -> FastAPI:
         )
         review.history.append(entry)
         review.state = new_state
-        return review
+        return entry
+
+    def _serialize_history_entry(entry: ReviewHistoryEntry) -> Dict[str, object]:
+        data = entry.dict(by_alias=True)
+        data["ts"] = entry.ts.isoformat()
+        data["issues"] = [issue.dict(by_alias=True) for issue in entry.issues]
+        return data
 
     def _validate_ready_for_approval(work: Work, verse: Verse) -> None:
         canonical_lang = work.canonical_lang
@@ -422,8 +452,9 @@ def create_app() -> FastAPI:
         verse = storage.load_verse(payload.work_id, verse_id)
         work = storage.load_work(payload.work_id)
         _validate_ready_for_approval(work, verse)
-        _transition_review(verse.review, "approved", user.email, "state_change")
+        entry = _transition_review(verse.review, "approved", user.email, "state_change")
         storage.save_verse(verse)
+        storage.append_review_log("verse", payload.work_id, verse_id, _serialize_history_entry(entry))
         return verse
 
     @app.post("/review/verse/{verse_id}/reject", response_model=Verse)
@@ -434,8 +465,9 @@ def create_app() -> FastAPI:
     ) -> Verse:
         verse = storage.load_verse(payload.work_id, verse_id)
         issues = payload.issues or []
-        _transition_review(verse.review, "rejected", user.email, "issue_add", issues=issues)
+        entry = _transition_review(verse.review, "rejected", user.email, "issue_add", issues=issues)
         storage.save_verse(verse)
+        storage.append_review_log("verse", payload.work_id, verse_id, _serialize_history_entry(entry))
         return verse
 
     @app.post("/review/verse/{verse_id}/flag", response_model=Verse)
@@ -445,8 +477,9 @@ def create_app() -> FastAPI:
         user: User = Depends(get_current_user),
     ) -> Verse:
         verse = storage.load_verse(payload.work_id, verse_id)
-        _transition_review(verse.review, "flagged", user.email, "flag")
+        entry = _transition_review(verse.review, "flagged", user.email, "flag")
         storage.save_verse(verse)
+        storage.append_review_log("verse", payload.work_id, verse_id, _serialize_history_entry(entry))
         return verse
 
     @app.post("/review/verse/{verse_id}/lock", response_model=Verse)
@@ -456,8 +489,9 @@ def create_app() -> FastAPI:
         user: User = Depends(get_current_user),
     ) -> Verse:
         verse = storage.load_verse(payload.work_id, verse_id)
-        _transition_review(verse.review, "locked", user.email, "lock")
+        entry = _transition_review(verse.review, "locked", user.email, "lock")
         storage.save_verse(verse)
+        storage.append_review_log("verse", payload.work_id, verse_id, _serialize_history_entry(entry))
         return verse
 
     @app.post("/review/commentary/{commentary_id}/approve", response_model=Commentary)
@@ -467,8 +501,9 @@ def create_app() -> FastAPI:
         user: User = Depends(get_current_user),
     ) -> Commentary:
         commentary = storage.load_commentary(payload.work_id, commentary_id)
-        _transition_review(commentary.review, "approved", user.email, "state_change")
+        entry = _transition_review(commentary.review, "approved", user.email, "state_change")
         storage.save_commentary(commentary)
+        storage.append_review_log("commentary", payload.work_id, commentary_id, _serialize_history_entry(entry))
         return commentary
 
     @app.post("/review/commentary/{commentary_id}/reject", response_model=Commentary)
@@ -478,8 +513,9 @@ def create_app() -> FastAPI:
         user: User = Depends(get_current_user),
     ) -> Commentary:
         commentary = storage.load_commentary(payload.work_id, commentary_id)
-        _transition_review(commentary.review, "rejected", user.email, "issue_add", issues=payload.issues)
+        entry = _transition_review(commentary.review, "rejected", user.email, "issue_add", issues=payload.issues)
         storage.save_commentary(commentary)
+        storage.append_review_log("commentary", payload.work_id, commentary_id, _serialize_history_entry(entry))
         return commentary
 
     @app.post("/review/commentary/{commentary_id}/flag", response_model=Commentary)
@@ -489,8 +525,9 @@ def create_app() -> FastAPI:
         user: User = Depends(get_current_user),
     ) -> Commentary:
         commentary = storage.load_commentary(payload.work_id, commentary_id)
-        _transition_review(commentary.review, "flagged", user.email, "flag")
+        entry = _transition_review(commentary.review, "flagged", user.email, "flag")
         storage.save_commentary(commentary)
+        storage.append_review_log("commentary", payload.work_id, commentary_id, _serialize_history_entry(entry))
         return commentary
 
     @app.post("/review/commentary/{commentary_id}/lock", response_model=Commentary)
@@ -500,8 +537,9 @@ def create_app() -> FastAPI:
         user: User = Depends(get_current_user),
     ) -> Commentary:
         commentary = storage.load_commentary(payload.work_id, commentary_id)
-        _transition_review(commentary.review, "locked", user.email, "lock")
+        entry = _transition_review(commentary.review, "locked", user.email, "lock")
         storage.save_commentary(commentary)
+        storage.append_review_log("commentary", payload.work_id, commentary_id, _serialize_history_entry(entry))
         return commentary
 
     def _merge_payload(work_id: str) -> Dict[str, object]:

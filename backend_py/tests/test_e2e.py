@@ -85,3 +85,67 @@ def test_register_login_create_verse_approve_export(client: TestClient, tmp_path
     assert output_path.exists()
     content = output_path.read_text(encoding="utf-8").strip().splitlines()
     assert any(json.loads(line)["type"] == "verse" for line in content)
+
+
+def test_duplicate_manual_number(client: TestClient):
+    work_payload = {
+        "work_id": "satyanusaran",
+        "title": {"en": "Satyanusaran", "bn": "Satyanusaran (BN)"},
+        "author": "Sree Sree Thakur",
+        "canonical_lang": "bn",
+        "langs": ["bn", "en"],
+        "structure": {"unit": "verse", "numbering": "sequential"},
+        "source_editions": [
+            {"id": "ED-PDF-BN-01", "lang": "bn", "type": "pdf", "provenance": "personal_copy"}
+        ],
+        "policy": {
+            "sacred": True,
+            "monetization": "forbidden",
+            "truthfulness": "never attribute words to Thakur without source",
+        },
+    }
+    response = client.post(
+        "/auth/register",
+        json={
+            "email": "demo@taapset.com",
+            "password": "stringst",
+            "roles": ["author"],
+        },
+    )
+    assert response.status_code == 201
+
+    response = client.post(
+        "/auth/login",
+        json={
+            "email": "demo@taapset.com",
+            "password": "stringst",
+        },
+    )
+    assert response.status_code == 200
+
+    response = client.put("/works/satyanusaran", json=work_payload)
+    assert response.status_code == 200
+
+    first_payload = {
+        "number_manual": "1",
+        "texts": {"bn": "original", "en": None},
+        "origin": [{"edition": "ED-PDF-BN-01", "page": 1, "para_index": 1}],
+        "tags": [],
+    }
+    create_response = client.post("/works/satyanusaran/verses", json=first_payload)
+    assert create_response.status_code == 201
+
+    duplicate_payload = {
+        "number_manual": "1",
+        "texts": {"bn": "dup test"},
+        "origin": [{"edition": "ED-PDF-BN-01", "page": 1, "para_index": 1}],
+        "tags": [],
+    }
+    dup_response = client.post("/works/satyanusaran/verses", json=duplicate_payload)
+
+    if dup_response.status_code == 409 and dup_response.json().get("detail") == "duplicate manual number":
+        print("Duplicate check OK")
+    else:
+        print("Duplicate check FAILED")
+    assert dup_response.status_code == 409
+    assert dup_response.json().get("detail") == "duplicate manual number"

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple
 
@@ -14,6 +14,8 @@ VERSES_DIR = "verses"
 COMMENTARY_DIR = "commentary"
 TRASH_DIR = "trash"
 USERS_FILE = "_users.json"
+LOGS_DIR = settings.DATA_ROOT.parent / "logs"
+REVIEW_LOG_DIR = LOGS_DIR / "review"
 
 VERSE_ID_PATTERN = re.compile(r"^V(\d{4})([a-z]?)$")
 COMMENTARY_ID_PATTERN = re.compile(r"^C-[A-Z0-9]+-V\d{4}-\d{4}$")
@@ -97,13 +99,47 @@ def save_verse(verse: Verse) -> None:
     )
 
 
-def delete_verse(work_id: str, verse_id: str) -> None:
+def _tombstone_path(kind: str, identifier: str, work_id: str) -> Path:
+    return (
+        work_dir(work_id)
+        / TRASH_DIR
+        / "tombstones"
+        / kind
+        / f"{identifier}.json"
+    )
+
+
+def _create_tombstone(kind: str, identifier: str, work_id: str, actor: str, original: Path, dest: Path) -> None:
+    tombstone = {
+        "type": kind,
+        "work_id": work_id,
+        "id": identifier,
+        "deleted_at": datetime.now(timezone.utc).isoformat(),
+        "actor": actor,
+        "original_path": str(original.relative_to(work_dir(work_id))),
+        "trashed_path": str(dest.relative_to(work_dir(work_id))),
+    }
+    path = _tombstone_path(kind, identifier, work_id)
+    write_json(path, tombstone)
+
+
+def manual_number_exists(work_id: str, number_manual: Optional[str], exclude: Optional[str] = None) -> bool:
+    if not number_manual:
+        return False
+    for verse in list_verses(work_id):
+        if verse.number_manual == number_manual and verse.verse_id != exclude:
+            return True
+    return False
+
+
+def delete_verse(work_id: str, verse_id: str, actor: str) -> None:
     src = verse_path(work_id, verse_id)
     if not src.exists():
         return
     dest = work_dir(work_id) / TRASH_DIR / VERSES_DIR / src.name
     dest.parent.mkdir(parents=True, exist_ok=True)
     src.replace(dest)
+    _create_tombstone("verses", verse_id, work_id, actor, src, dest)
 
 
 def list_commentary(work_id: str) -> List[Commentary]:
@@ -135,7 +171,7 @@ def save_commentary(commentary: Commentary) -> None:
     write_json(path, commentary.dict(by_alias=True))
 
 
-def delete_commentary(work_id: str, commentary_id: str) -> None:
+def delete_commentary(work_id: str, commentary_id: str, actor: str) -> None:
     base = work_dir(work_id) / COMMENTARY_DIR
     matches = list(base.glob(f"**/{commentary_id}.json"))
     if not matches:
@@ -145,6 +181,14 @@ def delete_commentary(work_id: str, commentary_id: str) -> None:
     dest = work_dir(work_id) / TRASH_DIR / rel
     dest.parent.mkdir(parents=True, exist_ok=True)
     src.replace(dest)
+    _create_tombstone(
+        "commentary",
+        commentary_id,
+        work_id,
+        actor,
+        work_dir(work_id) / rel,
+        dest,
+    )
 
 
 def _existing_verse_ids(work_id: str) -> Iterable[str]:
@@ -206,3 +250,23 @@ def load_users() -> List[User]:
 
 def save_users(users: List[User]) -> None:
     write_json(users_path(), [user.dict(by_alias=True) for user in users])
+
+
+def append_review_log(kind: str, work_id: str, identifier: str, payload: Dict) -> None:
+    REVIEW_LOG_DIR.mkdir(parents=True, exist_ok=True)
+    date_key = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    path = REVIEW_LOG_DIR / f"{date_key}.jsonl"
+    entry = {
+        "ts": payload.get("ts") or datetime.now(timezone.utc).isoformat(),
+        "kind": kind,
+        "work_id": work_id,
+        "id": identifier,
+        "actor": payload.get("actor"),
+        "action": payload.get("action"),
+        "from": payload.get("from"),
+        "to": payload.get("to"),
+        "issues": payload.get("issues", []),
+    }
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(entry, ensure_ascii=False))
+        handle.write("\n")
