@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { ReviewState, VerseListItem } from "../lib/types";
 
 interface VerseNavigatorProps {
@@ -54,7 +54,7 @@ export function VerseNavigator({
     setLocalSearch(searchTerm);
   }, [searchTerm]);
 
-  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     onSearch(localSearch.trim());
   };

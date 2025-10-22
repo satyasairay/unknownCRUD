@@ -34,8 +34,13 @@ interface HeaderBarProps {
   onValidate: () => void;
   onApprove: () => void;
   onReject: () => void;
+  onFlag: () => void;
+  onLock: () => void;
   onOpenVerseJump: () => void;
-  disableReviewerActions: boolean;
+  canApprove: boolean;
+  canReject: boolean;
+  canFlag: boolean;
+  canLock: boolean;
 }
 
 export function HeaderBar({
@@ -54,8 +59,13 @@ export function HeaderBar({
   onValidate,
   onApprove,
   onReject,
+  onFlag,
+  onLock,
   onOpenVerseJump,
-  disableReviewerActions,
+  canApprove,
+  canReject,
+  canFlag,
+  canLock,
 }: HeaderBarProps) {
   return (
     <header className="sticky top-0 z-20 border-b border-slate-800 bg-slate-950/95 backdrop-blur">
@@ -94,23 +104,30 @@ export function HeaderBar({
         <div className="ml-auto flex items-center gap-2">
           <ActionButton label="Save" shortcut="⌘S" onClick={onSave} />
           <ActionButton label="Save & Next" shortcut="⌘↵" onClick={onSaveNext} />
-          <ActionButton
-            label="Validate"
-            shortcut="V"
-            onClick={onValidate}
-            disabled={disableReviewerActions}
-          />
+          <ActionButton label="Validate" shortcut="V" onClick={onValidate} />
           <ActionButton
             label="Approve"
             shortcut="A"
             onClick={onApprove}
-            disabled={disableReviewerActions}
+            disabled={!canApprove}
           />
           <ActionButton
             label="Reject"
             shortcut="R"
             onClick={onReject}
-            disabled={disableReviewerActions}
+            disabled={!canReject}
+          />
+          <ActionButton
+            label="Flag"
+            shortcut="F"
+            onClick={onFlag}
+            disabled={!canFlag}
+          />
+          <ActionButton
+            label="Lock"
+            shortcut="L"
+            onClick={onLock}
+            disabled={!canLock}
           />
         </div>
 

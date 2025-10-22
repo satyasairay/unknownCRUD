@@ -154,6 +154,18 @@ def list_commentary(work_id: str) -> List[Commentary]:
     return items
 
 
+def list_commentary_for_verse(work_id: str, verse_id: str) -> List[Commentary]:
+    results: List[Commentary] = []
+    for commentary in list_commentary(work_id):
+        if commentary.verse_id == verse_id:
+            results.append(commentary)
+            continue
+        targets = commentary.targets or []
+        if any(verse_id in target.ids for target in targets):
+            results.append(commentary)
+    return results
+
+
 def load_commentary(work_id: str, commentary_id: str) -> Commentary:
     base = work_dir(work_id) / COMMENTARY_DIR
     if not base.exists():

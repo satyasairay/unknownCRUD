@@ -10,6 +10,7 @@
 | 2025-10-21 | v0.4-P3a | Added Auth UI (Login/Register/Logout), CSRF-aware Axios client, AuthContext, and header login/logout with action gating. | Phase 3a (frontend env + auth) completion. | Satyasai Ray       |
 | 2025-10-21 | P4a     | Schema normalization (server) + 5-language Verse editor; verse navigator with search/pagination; Command Palette | Complete P4a; align with schema_reference v1.    | Satyasai Ray       |
 | 2025-10-21 | P4b     | Verse tags control upgraded to chip input (comma/space/Enter/Tab, dedupe, Backspace remove)                      | Improve UX; ensure reliable `tags[]` persistence | Satyasai Ray       |
+| 2025-10-22 | P4b     | Populated all editor tabs (Translations, Segments, Origin, Commentary, Review, History, Preview, Attachments) and wired review actions with backend routes and history tracking. | Complete Phase 2 UI per schema + api contracts; close placeholder gaps from P4a. | Satyasai Ray       |
 
 ---
 

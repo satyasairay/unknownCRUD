@@ -6,6 +6,7 @@ import { EditorModal } from "./components/EditorModal";
 import { VerseTab } from "./components/VerseTab";
 import { AuthModal } from "./components/AuthModal";
 import { CommandPalette } from "./components/CommandPalette";
+import { AttachmentsTab, CommentaryTab, HistoryTab, OriginTab, PreviewTab, ReviewTab, SegmentsTab, TranslationsTab, } from "./components/EditorTabs";
 import { useAuth } from "./context/AuthContext";
 import { useAutosave } from "./hooks/useAutosave";
 import { API_BASE_URL, apiClient, formatError } from "./lib/apiClient";
@@ -56,6 +57,7 @@ function buildInitialDraft(work) {
         tags: [],
         origin,
         status: STATUS_DEFAULT,
+        reviewRequired: ["editor", "linguist", "final"],
         commentary: [],
         history: [],
         attachments: [],
@@ -87,6 +89,7 @@ export default function App() {
     const [paletteQuery, setPaletteQuery] = useState("");
     const [verseList, setVerseList] = useState([]);
     const [listLoading, setListLoading] = useState(false);
+    const [commentaryLoading, setCommentaryLoading] = useState(false);
     const [searchTerm, setSearchTerm] = useState("");
     const [pagination, setPagination] = useState({ offset: 0, limit: 20, total: 0 });
     const [connection, setConnection] = useState({
@@ -94,7 +97,20 @@ export default function App() {
         checking: true,
         baseUrl: API_BASE_URL,
     });
+    const [isReviewProcessing, setReviewProcessing] = useState(false);
     const { user, logout } = useAuth();
+    const rolePriority = {
+        author: 1,
+        reviewer: 2,
+        final: 3,
+        admin: 4,
+    };
+    const userRoleLevel = useMemo(() => {
+        if (!user?.roles?.length) {
+            return 0;
+        }
+        return user.roles.reduce((max, role) => Math.max(max, rolePriority[role] ?? 1), 1);
+    }, [user?.roles]);
     const handleLogout = useCallback(async () => {
         try {
             await logout();
@@ -144,6 +160,19 @@ export default function App() {
             setBannerMessage(`Failed to load work: ${formatError(error)}`);
         }
     }, []);
+    const fetchVerseCommentary = useCallback(async (workId, verseId) => {
+        setCommentaryLoading(true);
+        try {
+            const response = await apiClient.get(`/works/${workId}/verses/${verseId}/commentary`);
+            setVerseDraft((prev) => ({ ...prev, commentary: response.data }));
+        }
+        catch (error) {
+            setBannerMessage(`Failed to load commentary: ${formatError(error)}`);
+        }
+        finally {
+            setCommentaryLoading(false);
+        }
+    }, []);
     const loadVerseList = useCallback(async (options) => {
         if (!selectedWorkId) {
             return;
@@ -187,7 +216,8 @@ export default function App() {
                 const rawSegments = verse?.segments?.[lang];
                 segments[lang] = Array.isArray(rawSegments) ? rawSegments : [];
             });
-            const history = verse?.review?.history ?? [];
+            const reviewBlock = verse?.review ?? {};
+            const history = reviewBlock.history ?? [];
             setVerseDraft({
                 verseId: verse?.verse_id ?? verseId,
                 manualNumber: verse?.number_manual ?? "",
@@ -196,19 +226,22 @@ export default function App() {
                 segments,
                 tags: verse?.tags ?? [],
                 origin: verse?.origin ?? [],
-                status: verse?.review?.state ?? STATUS_DEFAULT,
-                commentary: verse?.commentary ?? [],
+                status: reviewBlock.state ?? STATUS_DEFAULT,
+                reviewRequired: reviewBlock.required_reviewers ?? ["editor", "linguist", "final"],
+                commentary: [],
                 history,
                 attachments: verse?.attachments ?? [],
             });
             setDirty(false);
             setErrorMessage(null);
+            await fetchVerseCommentary(selectedWorkId, verseId);
             setLastSavedAt(null);
         }
         catch (error) {
+            setCommentaryLoading(false);
             setBannerMessage(`Failed to load verse: ${formatError(error)}`);
         }
-    }, [selectedWorkId, workDetail]);
+    }, [selectedWorkId, workDetail, fetchVerseCommentary]);
     useEffect(() => {
         void fetchWorks();
     }, [fetchWorks]);
@@ -306,6 +339,110 @@ export default function App() {
     const handleTagsChange = (tags) => {
         setDraft((prev) => ({ ...prev, tags }));
     };
+    const handleSegmentsChange = useCallback((lang, nextSegments) => {
+        setDraft((prev) => ({
+            ...prev,
+            segments: {
+                ...prev.segments,
+                [lang]: nextSegments,
+            },
+        }));
+    }, [setDraft]);
+    const handleOriginAdd = useCallback(() => {
+        setDraft((prev) => ({
+            ...prev,
+            origin: [
+                ...prev.origin,
+                {
+                    edition: "",
+                    page: undefined,
+                    para_index: undefined,
+                },
+            ],
+        }));
+    }, [setDraft]);
+    const handleOriginUpdate = useCallback((index, update) => {
+        setDraft((prev) => {
+            const next = [...prev.origin];
+            next[index] = { ...next[index], ...update };
+            return { ...prev, origin: next };
+        });
+    }, [setDraft]);
+    const handleOriginRemove = useCallback((index) => {
+        setDraft((prev) => {
+            const next = prev.origin.filter((_, idx) => idx !== index);
+            return { ...prev, origin: next };
+        });
+    }, [setDraft]);
+    const handleAttachmentAdd = useCallback(() => {
+        setDraft((prev) => ({
+            ...prev,
+            attachments: [
+                ...prev.attachments,
+                { label: "", url: "", notes: "" },
+            ],
+        }));
+    }, [setDraft]);
+    const handleAttachmentUpdate = useCallback((index, update) => {
+        setDraft((prev) => {
+            const next = [...prev.attachments];
+            next[index] = { ...next[index], ...update };
+            return { ...prev, attachments: next };
+        });
+    }, [setDraft]);
+    const handleAttachmentRemove = useCallback((index) => {
+        setDraft((prev) => {
+            const next = prev.attachments.filter((_, idx) => idx !== index);
+            return { ...prev, attachments: next };
+        });
+    }, [setDraft]);
+    const handleCommentaryCreate = useCallback(async (payload) => {
+        if (!selectedWorkId || !verseDraft.verseId) {
+            setBannerMessage("Select a verse before adding commentary.");
+            return;
+        }
+        const textsPayload = Object.fromEntries(Object.entries(payload.texts ?? {}).map(([lang, value]) => [lang, value?.trim() || ""]));
+        try {
+            await apiClient.post(`/works/${selectedWorkId}/verses/${verseDraft.verseId}/commentary`, {
+                speaker: payload.speaker,
+                source: payload.source,
+                genre: payload.genre,
+                tags: payload.tags,
+                texts: textsPayload,
+            });
+            await fetchVerseCommentary(selectedWorkId, verseDraft.verseId);
+            setBannerMessage("Commentary note added.");
+        }
+        catch (error) {
+            setBannerMessage(`Failed to add commentary: ${formatError(error)}`);
+        }
+    }, [selectedWorkId, verseDraft.verseId, fetchVerseCommentary]);
+    const handleCommentaryDuplicate = useCallback(async (commentaryId, targetVerseId) => {
+        if (!selectedWorkId) {
+            return;
+        }
+        const source = verseDraft.commentary.find((entry) => entry.commentary_id === commentaryId);
+        if (!source) {
+            setBannerMessage("Unable to duplicate commentary: entry not found.");
+            return;
+        }
+        try {
+            await apiClient.post(`/works/${selectedWorkId}/verses/${targetVerseId}/commentary`, {
+                speaker: source.speaker,
+                source: source.source,
+                genre: source.genre,
+                tags: source.tags ?? [],
+                texts: Object.fromEntries(Object.entries(source.texts ?? {}).map(([lang, value]) => [lang, value ?? ""])),
+            });
+            if (targetVerseId === verseDraft.verseId) {
+                await fetchVerseCommentary(selectedWorkId, targetVerseId);
+            }
+            setBannerMessage(`Commentary duplicated to ${targetVerseId}.`);
+        }
+        catch (error) {
+            setBannerMessage(`Failed to duplicate commentary: ${formatError(error)}`);
+        }
+    }, [selectedWorkId, verseDraft.commentary, verseDraft.verseId, fetchVerseCommentary]);
     const preparePayload = useCallback((options) => {
         if (!workDetail) {
             return null;
@@ -421,27 +558,121 @@ export default function App() {
     const handleSaveAndNext = () => {
         void handleSave({ advance: true });
     };
-    const onValidate = () => {
-        setBannerMessage("Validation flow coming soon.");
-    };
-    const onApprove = () => {
-        setBannerMessage("Approval flow coming soon.");
-    };
-    const onReject = () => {
-        setBannerMessage("Rejection flow coming soon.");
-    };
     const formattedSavedAt = useMemo(() => formatTimestamp(lastSavedAt), [lastSavedAt]);
     const canonicalLang = workDetail?.canonical_lang ?? "bn";
     const workLanguages = useMemo(() => Array.from(new Set([...REQUIRED_LANGS, ...(workDetail?.langs ?? [])])), [workDetail?.langs]);
-    return (_jsxs("div", { className: "min-h-screen bg-slate-950 pb-12", children: [_jsx(HeaderBar, { works: works, selectedWorkId: selectedWorkId, onWorkChange: setSelectedWorkId, status: verseDraft.status, isSaving: isSaving, lastSavedAt: formattedSavedAt, connection: connection, userEmail: user?.email ?? null, onLoginClick: () => setAuthModalOpen(true), onLogoutClick: () => void handleLogout(), onSave: () => void handleSave(), onSaveNext: handleSaveAndNext, onValidate: onValidate, onApprove: onApprove, onReject: onReject, onOpenVerseJump: openCommandPalette, disableReviewerActions: !user }), _jsxs("main", { className: "mx-auto max-w-7xl px-6", children: [bannerMessage && (_jsx("div", { className: "mt-6 rounded-md border border-slate-700 bg-slate-900 px-4 py-3 text-sm text-slate-200", children: _jsxs("div", { className: "flex items-center justify-between", children: [_jsx("span", { children: bannerMessage }), _jsx("button", { type: "button", className: "text-xs text-slate-400 hover:text-white", onClick: () => setBannerMessage(null), children: "Dismiss" })] }) })), _jsxs("div", { className: "mt-6 flex flex-col gap-6 lg:flex-row", children: [_jsx(VerseNavigator, { items: verseList, loading: listLoading, total: pagination.total, offset: pagination.offset, limit: pagination.limit, searchTerm: searchTerm, onSearch: handleSearch, onSelect: handleVerseSelect, selectedVerseId: verseDraft.verseId, onPageChange: handlePageChange, onCreateNew: () => handleVerseSelect(null) }), _jsx("div", { className: "flex-1", children: _jsx(EditorModal, { title: workDetail
-                                        ? `${workDetail.title.en ?? workDetail.work_id} • Verse Editor`
-                                        : "Verse Editor", tabs: DEFAULT_TABS, activeTab: activeTab, onTabChange: setActiveTab, children: activeTab === "verse" ? (_jsx(VerseTab, { draft: verseDraft, canonicalLang: canonicalLang, workId: workDetail?.work_id ?? "", workLangs: workLanguages, errorMessage: errorMessage, onManualNumberChange: handleManualNumberChange, onTextChange: handleTextChange, onTagsChange: handleTagsChange })) : (_jsx(PlaceholderTab, { label: activeTab })) }) })] })] }), _jsx(CommandPalette, { isOpen: isPaletteOpen, query: paletteQuery, items: verseList, loading: listLoading, onQueryChange: (value) => {
+    const validationErrors = useMemo(() => {
+        const errors = [];
+        if (!(verseDraft.texts[canonicalLang]?.trim())) {
+            errors.push(`Canonical text (${canonicalLang.toUpperCase()}) is required.`);
+        }
+        if (!verseDraft.origin.length) {
+            errors.push("At least one origin reference is required before approval.");
+        }
+        return errors;
+    }, [verseDraft.texts, verseDraft.origin, canonicalLang]);
+    const canApprove = userRoleLevel >= 2 && !!verseDraft.verseId;
+    const canReject = userRoleLevel >= 2 && !!verseDraft.verseId;
+    const canFlag = userRoleLevel >= 2 && !!verseDraft.verseId;
+    const canLock = userRoleLevel >= 3 && !!verseDraft.verseId;
+    const handleValidate = useCallback(() => {
+        if (validationErrors.length) {
+            setBannerMessage(`Validation failed: ${validationErrors.join("; ")}`);
+        }
+        else {
+            setBannerMessage("Validation passed. Ready for review.");
+        }
+    }, [validationErrors]);
+    const performReviewAction = useCallback(async (action, issues) => {
+        const currentVerseId = verseDraft.verseId;
+        if (!selectedWorkId || !currentVerseId) {
+            setBannerMessage("Select a verse before performing review actions.");
+            return;
+        }
+        setReviewProcessing(true);
+        try {
+            const endpointMap = {
+                approve: `/review/verse/${currentVerseId}/approve`,
+                reject: `/review/verse/${currentVerseId}/reject`,
+                flag: `/review/verse/${currentVerseId}/flag`,
+                lock: `/review/verse/${currentVerseId}/lock`,
+            };
+            const payload = { work_id: selectedWorkId };
+            if (action === "reject") {
+                payload.issues = issues ?? [];
+            }
+            await apiClient.post(endpointMap[action], payload);
+            await loadVerseDetail(currentVerseId);
+            await loadVerseList({ offset: pagination.offset, query: searchTerm });
+            const actionMessage = action === "approve"
+                ? "approved"
+                : action === "reject"
+                    ? "sent back with requested changes"
+                    : action === "flag"
+                        ? "flagged for follow-up"
+                        : "locked";
+            setBannerMessage(`Verse ${currentVerseId} ${actionMessage}.`);
+        }
+        catch (error) {
+            setBannerMessage(`Review action failed: ${formatError(error)}`);
+        }
+        finally {
+            setReviewProcessing(false);
+        }
+    }, [
+        verseDraft.verseId,
+        selectedWorkId,
+        loadVerseDetail,
+        loadVerseList,
+        pagination.offset,
+        searchTerm,
+    ]);
+    const handleApproveAction = useCallback(async () => {
+        if (validationErrors.length) {
+            setBannerMessage(`Resolve validation issues before approval: ${validationErrors.join("; ")}`);
+            return;
+        }
+        await performReviewAction("approve");
+    }, [performReviewAction, validationErrors]);
+    const handleRejectAction = useCallback(async (issues) => {
+        await performReviewAction("reject", issues);
+    }, [performReviewAction]);
+    const handleFlagAction = useCallback(async () => {
+        await performReviewAction("flag");
+    }, [performReviewAction]);
+    const renderActiveTab = () => {
+        switch (activeTab) {
+            case "verse":
+                return (_jsx(VerseTab, { draft: verseDraft, canonicalLang: canonicalLang, workId: workDetail?.work_id ?? "", workLangs: workLanguages, errorMessage: errorMessage, onManualNumberChange: handleManualNumberChange, onTextChange: handleTextChange, onTagsChange: handleTagsChange }));
+            case "translations":
+                return (_jsx(TranslationsTab, { languages: workLanguages, canonicalLang: canonicalLang, texts: verseDraft.texts, onChange: handleTextChange }));
+            case "segments":
+                return (_jsx(SegmentsTab, { languages: workLanguages, segments: verseDraft.segments, texts: verseDraft.texts, onChange: handleSegmentsChange }));
+            case "origin":
+                return (_jsx(OriginTab, { origin: verseDraft.origin, editions: workDetail?.source_editions ?? [], onAdd: handleOriginAdd, onUpdate: handleOriginUpdate, onRemove: handleOriginRemove }));
+            case "commentary":
+                return (_jsx(CommentaryTab, { verseId: verseDraft.verseId, languages: workLanguages, entries: verseDraft.commentary, loading: commentaryLoading, onCreate: handleCommentaryCreate, onDuplicate: handleCommentaryDuplicate }));
+            case "review":
+                return (_jsx(ReviewTab, { status: verseDraft.status, requiredReviewers: verseDraft.reviewRequired, validationErrors: validationErrors, canApprove: !isReviewProcessing && canApprove, canReject: !isReviewProcessing && canReject, canFlag: !isReviewProcessing && canFlag, canLock: !isReviewProcessing && canLock, isProcessing: isReviewProcessing, onApprove: handleApproveAction, onReject: handleRejectAction, onFlag: handleFlagAction, onLock: handleLockAction }));
+            case "history":
+                return _jsx(HistoryTab, { history: verseDraft.history });
+            case "preview":
+                return (_jsx(PreviewTab, { canonicalLang: canonicalLang, languages: workLanguages, texts: verseDraft.texts, commentary: verseDraft.commentary }));
+            case "attachments":
+                return (_jsx(AttachmentsTab, { attachments: verseDraft.attachments, onAdd: handleAttachmentAdd, onUpdate: handleAttachmentUpdate, onRemove: handleAttachmentRemove }));
+            default:
+                return null;
+        }
+    };
+    const handleLockAction = useCallback(async () => {
+        await performReviewAction("lock");
+    }, [performReviewAction]);
+    return (_jsxs("div", { className: "min-h-screen bg-slate-950 pb-12", children: [_jsx(HeaderBar, { works: works, selectedWorkId: selectedWorkId, onWorkChange: setSelectedWorkId, status: verseDraft.status, isSaving: isSaving, lastSavedAt: formattedSavedAt, connection: connection, userEmail: user?.email ?? null, onLoginClick: () => setAuthModalOpen(true), onLogoutClick: () => void handleLogout(), onSave: () => void handleSave(), onSaveNext: handleSaveAndNext, onValidate: handleValidate, onApprove: () => void handleApproveAction(), onReject: () => { setActiveTab("review"); setBannerMessage("Enter rejection issues in the Review tab before submitting."); }, onFlag: () => void handleFlagAction(), onLock: () => void handleLockAction(), onOpenVerseJump: openCommandPalette, canApprove: !isReviewProcessing && canApprove, canReject: !isReviewProcessing && canReject, canFlag: !isReviewProcessing && canFlag, canLock: !isReviewProcessing && canLock }), _jsxs("main", { className: "mx-auto max-w-7xl px-6", children: [bannerMessage && (_jsx("div", { className: "mt-6 rounded-md border border-slate-700 bg-slate-900 px-4 py-3 text-sm text-slate-200", children: _jsxs("div", { className: "flex items-center justify-between", children: [_jsx("span", { children: bannerMessage }), _jsx("button", { type: "button", className: "text-xs text-slate-400 hover:text-white", onClick: () => setBannerMessage(null), children: "Dismiss" })] }) })), _jsxs("div", { className: "mt-6 flex flex-col gap-6 lg:flex-row", children: [_jsx(VerseNavigator, { items: verseList, loading: listLoading, total: pagination.total, offset: pagination.offset, limit: pagination.limit, searchTerm: searchTerm, onSearch: handleSearch, onSelect: handleVerseSelect, selectedVerseId: verseDraft.verseId, onPageChange: handlePageChange, onCreateNew: () => handleVerseSelect(null) }), _jsx("div", { className: "flex-1", children: _jsx(EditorModal, { title: workDetail
+                                        ? `${workDetail.title.en ?? workDetail.work_id} - Verse Editor`
+                                        : "Verse Editor", tabs: DEFAULT_TABS, activeTab: activeTab, onTabChange: setActiveTab, children: renderActiveTab() }) })] })] }), _jsx(CommandPalette, { isOpen: isPaletteOpen, query: paletteQuery, items: verseList, loading: listLoading, onQueryChange: (value) => {
                     setPaletteQuery(value);
-                    handleSearch(value);
+                    void handleSearch(value);
                 }, onClose: () => setPaletteOpen(false), onSelect: (verseId) => handleCommandSelect(verseId) }), _jsx(AuthModal, { isOpen: isAuthModalOpen, onClose: () => setAuthModalOpen(false) })] }));
-}
-function PlaceholderTab({ label }) {
-    return (_jsxs("div", { className: "rounded-md border border-dashed border-slate-700 bg-slate-900/40 px-4 py-14 text-center text-sm text-slate-400", children: [label, " tab coming soon."] }));
 }
 function incrementManualNumber(current) {
     const numeric = parseInt(current, 10);

@@ -5,11 +5,26 @@ import { EditorModal, TabConfig } from "./components/EditorModal";
 import { VerseTab } from "./components/VerseTab";
 import { AuthModal } from "./components/AuthModal";
 import { CommandPalette } from "./components/CommandPalette";
+import {
+  AttachmentsTab,
+  CommentaryTab,
+  HistoryTab,
+  OriginTab,
+  PreviewTab,
+  ReviewTab,
+  SegmentsTab,
+  TranslationsTab,
+} from "./components/EditorTabs";
 import { useAuth } from "./context/AuthContext";
 import { useAutosave } from "./hooks/useAutosave";
 import { API_BASE_URL, apiClient, formatError } from "./lib/apiClient";
 import {
+  AttachmentRef,
+  CommentaryEntry,
+  CommentaryFormData,
   OriginEntry,
+  ReviewHistoryEntry,
+  ReviewHistoryIssue,
   ReviewState,
   SavePayload,
   VerseDraft,
@@ -78,6 +93,7 @@ function buildInitialDraft(work: WorkDetail | null): VerseDraft {
     tags: [],
     origin,
     status: STATUS_DEFAULT,
+    reviewRequired: ["editor", "linguist", "final"],
     commentary: [],
     history: [],
     attachments: [],
@@ -111,6 +127,7 @@ export default function App() {
   const [paletteQuery, setPaletteQuery] = useState("");
   const [verseList, setVerseList] = useState<VerseListItem[]>([]);
   const [listLoading, setListLoading] = useState(false);
+  const [commentaryLoading, setCommentaryLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [pagination, setPagination] = useState({ offset: 0, limit: 20, total: 0 });
   const [connection, setConnection] = useState({
@@ -119,7 +136,26 @@ export default function App() {
     baseUrl: API_BASE_URL,
   });
 
+  const [isReviewProcessing, setReviewProcessing] = useState(false);
+
   const { user, logout } = useAuth();
+
+  const rolePriority: Record<string, number> = {
+    author: 1,
+    reviewer: 2,
+    final: 3,
+    admin: 4,
+  };
+
+  const userRoleLevel = useMemo(() => {
+    if (!user?.roles?.length) {
+      return 0;
+    }
+    return user.roles.reduce(
+      (max, role) => Math.max(max, rolePriority[role] ?? 1),
+      1,
+    );
+  }, [user?.roles]);
 
   const handleLogout = useCallback(async () => {
     try {
@@ -168,6 +204,23 @@ export default function App() {
       } catch (error) {
         setWorkDetail(null);
         setBannerMessage(`Failed to load work: ${formatError(error)}`);
+      }
+    },
+    [],
+  );
+
+  const fetchVerseCommentary = useCallback(
+    async (workId: string, verseId: string) => {
+      setCommentaryLoading(true);
+      try {
+        const response = await apiClient.get<CommentaryEntry[]>(
+          `/works/${workId}/verses/${verseId}/commentary`,
+        );
+        setVerseDraft((prev) => ({ ...prev, commentary: response.data }));
+      } catch (error) {
+        setBannerMessage(`Failed to load commentary: ${formatError(error)}`);
+      } finally {
+        setCommentaryLoading(false);
       }
     },
     [],
@@ -224,7 +277,8 @@ export default function App() {
           const rawSegments = verse?.segments?.[lang];
           segments[lang] = Array.isArray(rawSegments) ? rawSegments : [];
         });
-        const history = verse?.review?.history ?? [];
+        const reviewBlock = verse?.review ?? {};
+        const history: ReviewHistoryEntry[] = reviewBlock.history ?? [];
         setVerseDraft({
           verseId: verse?.verse_id ?? verseId,
           manualNumber: verse?.number_manual ?? "",
@@ -233,19 +287,22 @@ export default function App() {
           segments,
           tags: verse?.tags ?? [],
           origin: verse?.origin ?? [],
-          status: verse?.review?.state ?? STATUS_DEFAULT,
-          commentary: verse?.commentary ?? [],
+          status: reviewBlock.state ?? STATUS_DEFAULT,
+          reviewRequired: reviewBlock.required_reviewers ?? ["editor", "linguist", "final"],
+          commentary: [],
           history,
           attachments: verse?.attachments ?? [],
         });
         setDirty(false);
         setErrorMessage(null);
+        await fetchVerseCommentary(selectedWorkId, verseId);
         setLastSavedAt(null);
       } catch (error) {
+        setCommentaryLoading(false);
         setBannerMessage(`Failed to load verse: ${formatError(error)}`);
       }
     },
-    [selectedWorkId, workDetail],
+    [selectedWorkId, workDetail, fetchVerseCommentary],
   );
 
   useEffect(() => {
@@ -371,6 +428,144 @@ export default function App() {
   const handleTagsChange = (tags: string[]) => {
     setDraft((prev) => ({ ...prev, tags }));
   };
+
+  const handleSegmentsChange = useCallback(
+    (lang: string, nextSegments: string[]) => {
+      setDraft((prev) => ({
+        ...prev,
+        segments: {
+          ...prev.segments,
+          [lang]: nextSegments,
+        },
+      }));
+    },
+    [setDraft],
+  );
+
+  const handleOriginAdd = useCallback(() => {
+    setDraft((prev) => ({
+      ...prev,
+      origin: [
+        ...prev.origin,
+        {
+          edition: "",
+          page: undefined,
+          para_index: undefined,
+        },
+      ],
+    }));
+  }, [setDraft]);
+
+  const handleOriginUpdate = useCallback(
+    (index: number, update: Partial<OriginEntry>) => {
+      setDraft((prev) => {
+        const next = [...prev.origin];
+        next[index] = { ...next[index], ...update };
+        return { ...prev, origin: next };
+      });
+    },
+    [setDraft],
+  );
+
+  const handleOriginRemove = useCallback(
+    (index: number) => {
+      setDraft((prev) => {
+        const next = prev.origin.filter((_, idx) => idx !== index);
+        return { ...prev, origin: next };
+      });
+    },
+    [setDraft],
+  );
+
+  const handleAttachmentAdd = useCallback(() => {
+    setDraft((prev) => ({
+      ...prev,
+      attachments: [
+        ...prev.attachments,
+        { label: "", url: "", notes: "" },
+      ],
+    }));
+  }, [setDraft]);
+
+  const handleAttachmentUpdate = useCallback(
+    (index: number, update: Partial<AttachmentRef>) => {
+      setDraft((prev) => {
+        const next = [...prev.attachments];
+        next[index] = { ...next[index], ...update };
+        return { ...prev, attachments: next };
+      });
+    },
+    [setDraft],
+  );
+
+  const handleAttachmentRemove = useCallback(
+    (index: number) => {
+      setDraft((prev) => {
+        const next = prev.attachments.filter((_, idx) => idx !== index);
+        return { ...prev, attachments: next };
+      });
+    },
+    [setDraft],
+  );
+
+  const handleCommentaryCreate = useCallback(
+    async (payload: CommentaryFormData) => {
+      if (!selectedWorkId || !verseDraft.verseId) {
+        setBannerMessage("Select a verse before adding commentary.");
+        return;
+      }
+      const textsPayload = Object.fromEntries(
+        Object.entries(payload.texts ?? {}).map(([lang, value]) => [lang, value?.trim() || ""]),
+      );
+      try {
+        await apiClient.post(`/works/${selectedWorkId}/verses/${verseDraft.verseId}/commentary`, {
+          speaker: payload.speaker,
+          source: payload.source,
+          genre: payload.genre,
+          tags: payload.tags,
+          texts: textsPayload,
+        });
+        await fetchVerseCommentary(selectedWorkId, verseDraft.verseId);
+        setBannerMessage("Commentary note added.");
+      } catch (error) {
+        setBannerMessage(`Failed to add commentary: ${formatError(error)}`);
+      }
+    },
+    [selectedWorkId, verseDraft.verseId, fetchVerseCommentary],
+  );
+
+  const handleCommentaryDuplicate = useCallback(
+    async (commentaryId: string, targetVerseId: string) => {
+      if (!selectedWorkId) {
+        return;
+      }
+      const source = verseDraft.commentary.find(
+        (entry) => entry.commentary_id === commentaryId,
+      );
+      if (!source) {
+        setBannerMessage("Unable to duplicate commentary: entry not found.");
+        return;
+      }
+      try {
+        await apiClient.post(`/works/${selectedWorkId}/verses/${targetVerseId}/commentary`, {
+          speaker: source.speaker,
+          source: source.source,
+          genre: source.genre,
+          tags: source.tags ?? [],
+          texts: Object.fromEntries(
+            Object.entries(source.texts ?? {}).map(([lang, value]) => [lang, value ?? ""]),
+          ),
+        });
+        if (targetVerseId === verseDraft.verseId) {
+          await fetchVerseCommentary(selectedWorkId, targetVerseId);
+        }
+        setBannerMessage(`Commentary duplicated to ${targetVerseId}.`);
+      } catch (error) {
+        setBannerMessage(`Failed to duplicate commentary: ${formatError(error)}`);
+      }
+    },
+    [selectedWorkId, verseDraft.commentary, verseDraft.verseId, fetchVerseCommentary],
+  );
 
   const preparePayload = useCallback(
     (options?: { silent?: boolean }): SavePayload | null => {
@@ -518,18 +713,6 @@ export default function App() {
     void handleSave({ advance: true });
   };
 
-  const onValidate = () => {
-    setBannerMessage("Validation flow coming soon.");
-  };
-
-  const onApprove = () => {
-    setBannerMessage("Approval flow coming soon.");
-  };
-
-  const onReject = () => {
-    setBannerMessage("Rejection flow coming soon.");
-  };
-
   const formattedSavedAt = useMemo(
     () => formatTimestamp(lastSavedAt),
     [lastSavedAt],
@@ -540,6 +723,199 @@ export default function App() {
     () => Array.from(new Set([...REQUIRED_LANGS, ...(workDetail?.langs ?? [])])),
     [workDetail?.langs],
   );
+
+  const validationErrors = useMemo(() => {
+    const errors: string[] = [];
+    if (!(verseDraft.texts[canonicalLang]?.trim())) {
+      errors.push(`Canonical text (${canonicalLang.toUpperCase()}) is required.`);
+    }
+    if (!verseDraft.origin.length) {
+      errors.push("At least one origin reference is required before approval.");
+    }
+    return errors;
+  }, [verseDraft.texts, verseDraft.origin, canonicalLang]);
+
+  const canApprove = userRoleLevel >= 2 && !!verseDraft.verseId;
+  const canReject = userRoleLevel >= 2 && !!verseDraft.verseId;
+  const canFlag = userRoleLevel >= 2 && !!verseDraft.verseId;
+  const canLock = userRoleLevel >= 3 && !!verseDraft.verseId;
+
+  const handleValidate = useCallback(() => {
+    if (validationErrors.length) {
+      setBannerMessage(`Validation failed: ${validationErrors.join("; ")}`);
+    } else {
+      setBannerMessage("Validation passed. Ready for review.");
+    }
+  }, [validationErrors]);
+
+  const performReviewAction = useCallback(
+    async (
+      action: "approve" | "reject" | "flag" | "lock",
+      issues?: ReviewHistoryIssue[],
+    ) => {
+      const currentVerseId = verseDraft.verseId;
+      if (!selectedWorkId || !currentVerseId) {
+        setBannerMessage("Select a verse before performing review actions.");
+        return;
+      }
+      setReviewProcessing(true);
+      try {
+        const endpointMap = {
+          approve: `/review/verse/${currentVerseId}/approve`,
+          reject: `/review/verse/${currentVerseId}/reject`,
+          flag: `/review/verse/${currentVerseId}/flag`,
+          lock: `/review/verse/${currentVerseId}/lock`,
+        } as const;
+        const payload: Record<string, unknown> = { work_id: selectedWorkId };
+        if (action === "reject") {
+          payload.issues = issues ?? [];
+        }
+        await apiClient.post(endpointMap[action], payload);
+        await loadVerseDetail(currentVerseId);
+        await loadVerseList({ offset: pagination.offset, query: searchTerm });
+        const actionMessage =
+          action === "approve"
+            ? "approved"
+            : action === "reject"
+            ? "sent back with requested changes"
+            : action === "flag"
+            ? "flagged for follow-up"
+            : "locked";
+        setBannerMessage(`Verse ${currentVerseId} ${actionMessage}.`);
+      } catch (error) {
+        setBannerMessage(`Review action failed: ${formatError(error)}`);
+      } finally {
+        setReviewProcessing(false);
+      }
+    },
+    [
+      verseDraft.verseId,
+      selectedWorkId,
+      loadVerseDetail,
+      loadVerseList,
+      pagination.offset,
+      searchTerm,
+    ],
+  );
+
+  const handleApproveAction = useCallback(async () => {
+    if (validationErrors.length) {
+      setBannerMessage(`Resolve validation issues before approval: ${validationErrors.join("; ")}`);
+      return;
+    }
+    await performReviewAction("approve");
+  }, [performReviewAction, validationErrors]);
+
+  const handleRejectAction = useCallback(
+    async (issues: ReviewHistoryIssue[]) => {
+      await performReviewAction("reject", issues);
+    },
+    [performReviewAction],
+  );
+
+  const handleFlagAction = useCallback(async () => {
+    await performReviewAction("flag");
+  }, [performReviewAction]);
+
+  const renderActiveTab = () => {
+    switch (activeTab) {
+      case "verse":
+        return (
+          <VerseTab
+            draft={verseDraft}
+            canonicalLang={canonicalLang}
+            workId={workDetail?.work_id ?? ""}
+            workLangs={workLanguages}
+            errorMessage={errorMessage}
+            onManualNumberChange={handleManualNumberChange}
+            onTextChange={handleTextChange}
+            onTagsChange={handleTagsChange}
+          />
+        );
+      case "translations":
+        return (
+          <TranslationsTab
+            languages={workLanguages}
+            canonicalLang={canonicalLang}
+            texts={verseDraft.texts}
+            onChange={handleTextChange}
+          />
+        );
+      case "segments":
+        return (
+          <SegmentsTab
+            languages={workLanguages}
+            segments={verseDraft.segments}
+            texts={verseDraft.texts}
+            onChange={handleSegmentsChange}
+          />
+        );
+      case "origin":
+        return (
+          <OriginTab
+            origin={verseDraft.origin}
+            editions={workDetail?.source_editions ?? []}
+            onAdd={handleOriginAdd}
+            onUpdate={handleOriginUpdate}
+            onRemove={handleOriginRemove}
+          />
+        );
+      case "commentary":
+        return (
+          <CommentaryTab
+            verseId={verseDraft.verseId}
+            languages={workLanguages}
+            entries={verseDraft.commentary}
+            loading={commentaryLoading}
+            onCreate={handleCommentaryCreate}
+            onDuplicate={handleCommentaryDuplicate}
+          />
+        );
+      case "review":
+        return (
+          <ReviewTab
+            status={verseDraft.status}
+            requiredReviewers={verseDraft.reviewRequired}
+            validationErrors={validationErrors}
+            canApprove={!isReviewProcessing && canApprove}
+            canReject={!isReviewProcessing && canReject}
+            canFlag={!isReviewProcessing && canFlag}
+            canLock={!isReviewProcessing && canLock}
+            isProcessing={isReviewProcessing}
+            onApprove={handleApproveAction}
+            onReject={handleRejectAction}
+            onFlag={handleFlagAction}
+            onLock={handleLockAction}
+          />
+        );
+      case "history":
+        return <HistoryTab history={verseDraft.history} />;
+      case "preview":
+        return (
+          <PreviewTab
+            canonicalLang={canonicalLang}
+            languages={workLanguages}
+            texts={verseDraft.texts}
+            commentary={verseDraft.commentary}
+          />
+        );
+      case "attachments":
+        return (
+          <AttachmentsTab
+            attachments={verseDraft.attachments}
+            onAdd={handleAttachmentAdd}
+            onUpdate={handleAttachmentUpdate}
+            onRemove={handleAttachmentRemove}
+          />
+        );
+      default:
+        return null;
+    }
+  };
+
+  const handleLockAction = useCallback(async () => {
+    await performReviewAction("lock");
+  }, [performReviewAction]);
 
   return (
     <div className="min-h-screen bg-slate-950 pb-12">
@@ -556,11 +932,16 @@ export default function App() {
         onLogoutClick={() => void handleLogout()}
         onSave={() => void handleSave()}
         onSaveNext={handleSaveAndNext}
-        onValidate={onValidate}
-        onApprove={onApprove}
-        onReject={onReject}
+        onValidate={handleValidate}
+        onApprove={() => void handleApproveAction()}
+        onReject={() => { setActiveTab("review"); setBannerMessage("Enter rejection issues in the Review tab before submitting."); }}
+        onFlag={() => void handleFlagAction()}
+        onLock={() => void handleLockAction()}
         onOpenVerseJump={openCommandPalette}
-        disableReviewerActions={!user}
+        canApprove={!isReviewProcessing && canApprove}
+        canReject={!isReviewProcessing && canReject}
+        canFlag={!isReviewProcessing && canFlag}
+        canLock={!isReviewProcessing && canLock}
       />
 
       <main className="mx-auto max-w-7xl px-6">
@@ -598,27 +979,14 @@ export default function App() {
             <EditorModal
               title={
                 workDetail
-                  ? `${workDetail.title.en ?? workDetail.work_id} • Verse Editor`
+                  ? `${workDetail.title.en ?? workDetail.work_id} - Verse Editor`
                   : "Verse Editor"
               }
               tabs={DEFAULT_TABS}
               activeTab={activeTab}
               onTabChange={setActiveTab}
             >
-              {activeTab === "verse" ? (
-                <VerseTab
-                  draft={verseDraft}
-                  canonicalLang={canonicalLang}
-                  workId={workDetail?.work_id ?? ""}
-                  workLangs={workLanguages}
-                  errorMessage={errorMessage}
-                  onManualNumberChange={handleManualNumberChange}
-                  onTextChange={handleTextChange}
-                  onTagsChange={handleTagsChange}
-                />
-              ) : (
-                <PlaceholderTab label={activeTab} />
-              )}
+              {renderActiveTab()}
             </EditorModal>
           </div>
         </div>
@@ -630,7 +998,7 @@ export default function App() {
         loading={listLoading}
         onQueryChange={(value) => {
           setPaletteQuery(value);
-          handleSearch(value);
+          void handleSearch(value);
         }}
         onClose={() => setPaletteOpen(false)}
         onSelect={(verseId) => handleCommandSelect(verseId)}
@@ -639,14 +1007,6 @@ export default function App() {
         isOpen={isAuthModalOpen}
         onClose={() => setAuthModalOpen(false)}
       />
-    </div>
-  );
-}
-
-function PlaceholderTab({ label }: { label: string }) {
-  return (
-    <div className="rounded-md border border-dashed border-slate-700 bg-slate-900/40 px-4 py-14 text-center text-sm text-slate-400">
-      {label} tab coming soon.
     </div>
   );
 }

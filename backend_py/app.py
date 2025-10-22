@@ -398,6 +398,15 @@ def create_app() -> FastAPI:
         except FileNotFoundError:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Commentary not found")
 
+    @app.get("/works/{work_id}/verses/{verse_id}/commentary", response_model=List[Commentary])
+    def list_commentary_for_verse(work_id: str, verse_id: str) -> List[Commentary]:
+        try:
+            storage.load_verse(work_id, verse_id)
+        except FileNotFoundError:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Verse not found")
+        commentaries = storage.list_commentary_for_verse(work_id, verse_id)
+        return [commentary for commentary in commentaries]
+
     @app.post("/works/{work_id}/verses/{verse_id}/commentary", status_code=status.HTTP_201_CREATED)
     async def create_commentary(
         work_id: str,

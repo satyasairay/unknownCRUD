@@ -453,158 +453,113 @@ useHotkeys('ctrl+k, meta+k', () => openSearchModal());
 ---
 # P4b — Populate Editor Tabs from Schema (Enhanced for Fresh Context start) ##IMPORTANT## Newly patched 10/21/2025
 
-**Purpose:**
-Re‑initialize Codex understanding after a context reset and continue development from the end of P4a. Ensure Codex comprehends project structure, schema, and existing functionality before populating all editor tabs according to `docs/schema_reference.md` and `docs/ui_flows.md`.
-
----
-
-## 🧭 Context Recap (for Fresh Start)
-
-The project is **Unknown CRUD Library** — a modular multi‑book editorial CRUD platform.
-
-* **Frontend:** React + Vite + Tailwind (TypeScript).
-* **Backend:** FastAPI + JSON‑on‑disk persistence under `/data/library/<work_id>/`.
-* **Specs:** Located in `/docs/` (`schema_reference.md`, `api_contracts.md`, `ui_flows.md`, etc.).
-* **Phase 2 progress:**
-
-  * ✅ P4 & P4a completed — Verse tab with per‑work preferred language, 5‑language compliance, verse navigator, and pagination.
-  * ⏳ P4b (this phase) — populate all remaining tabs with real fields and handlers.
+**Run context:** Continue directly after P4a. (autosave, CSRF, per‑work preferred language, navigator, palette). Do **not** duplicate files; replace placeholders in place.
 
 ---
 
 ## 🎯 Objective
 
-Replace all “Coming Soon” placeholders in editor tabs with fully functional UI components that directly map to the backend JSON schema. Every tab must read/write data into the shared `verseDraft` object and persist correctly through Save.
+Replace all "Coming Soon" placeholders with fully functional, schema‑accurate tabs. Every tab must read/write through the shared `verseDraft` and persist via existing Save/Save&Next flows to the FastAPI backend.
 
 ---
 
-## 🧩 Implementation Requirements
+## 🔧 Tabs to Implement (map 1:1 to schema/UI flows)
 
-### 1️⃣ Translations Tab
+1. **Translations Tab**
 
-**Source:** `schema_reference.md §3` → `texts: { bn, en, or, hi, as }`
+* Render editors for all languages in `work.langs` bound to `verseDraft.texts[lang]`.
+* Preserve 5‑language completeness (bn, en, or, hi, as).
+* Validation: canonical language must be non‑empty for Validate/Approve.
 
-* Render textareas for each language in `work.langs`.
-* Bind values to `verseDraft.texts[lang]`.
-* Maintain autosave and validation.
-* UI matches Verse tab styling.
+2. **Segments Tab**
 
-### 2️⃣ Segments Tab
+* For each `lang`, editable ordered list of sentences from `verseDraft.segments[lang]`.
+* Provide split/merge/reorder; keep in sync with text (basic checks only).
+* Persist arrays exactly as saved (no auto-trim of empty unless user deletes).
 
-**Source:** `schema_reference.md §3` → `segments: { lang: string[] }`
+3. **Origin Tab**
 
-* Editable list per language.
-* Allow split (at cursor) / merge (with next) / reorder.
-* Keep arrays synced with `verseDraft.segments[lang]`.
+* Table rows for `origin[]` items: { edition, page, para_index }.
+* Edition dropdown values come from `work.source_editions[].id`.
+* Add/Remove rows; at least one origin required before Approve.
 
-### 3️⃣ Origin Tab
+4. **Commentary Tab**
 
-**Source:** `schema_reference.md §3` → `origin: [ { edition, page, para_index } ]`
+* List existing commentary linked to the verse with minimal cards (speaker, source, genre, tags, texts).
+* **Add Note** creates a new commentary item; **Duplicate to other verse** supported.
+* Use backend routes in `api_contracts.md`; if a list endpoint is absent, add a minimal list handler consistent with current design.
 
-* Render table‑like form.
-* Edition dropdown → `work.source_editions[].id`.
-* Numeric inputs for `page` and `para_index`.
-* Add / remove row buttons.
+5. **Review Tab**
 
-### 4️⃣ Commentary Tab
+* State dropdown gated by role (`draft|review_pending|approved|locked|rejected|flagged`).
+* Issues[] editor with fields: path, lang, problem, found, expected, suggestion, severity.
+* Wire buttons to backend: Approve, Reject, Flag, Lock.
+* On transitions, refresh `review.state` and append history; show toasts for success/errors.
 
-**Source:** `schema_reference.md §4`
+6. **History Tab**
 
-* List commentary items for this verse via `/works/:id/verses/:vid/commentary`.
-* Each card shows `speaker`, `source`, `genre`, `tags`, and `texts`.
-* “Add Note” → creates new commentary via POST; duplicate uses backend clone logic.
+* Timeline from `review.history[]` (ts, actor, action, from→to, issues count).
+* Expand to reveal entry JSON; copy affordance.
 
-### 5️⃣ Review Tab
+7. **Preview Tab**
 
-**Source:** `api_contracts.md §5`
+* Reader view with language fallback bn→en→or→hi→as.
+* Render commentary excerpts beneath the verse text; collapsible blocks.
+* Mirrors the clean export shape (no reviewer data shown here).
 
-* Dropdown for state (`draft | review_pending | approved | locked | rejected | flagged`).
-* Issue editor table for `issues[]`: `path`, `lang`, `problem`, `found`, `expected`, `suggestion`, `severity`.
-* Buttons → call backend endpoints:
+8. **Attachments Tab**
 
-  * `/review/verse/:vid/approve`
-  * `/review/verse/:vid/reject`
-  * `/review/verse/:vid/flag`
-  * `/review/verse/:vid/lock`
-* Guard by user roles (from `useAuth()`).
-
-### 6️⃣ History Tab
-
-**Source:** `schema_reference.md §7`
-
-* Render timeline of `review.history[]` entries.
-* Show `ts`, `actor`, `action`, `from→to`, and `issues` summary.
-* Expand row for diffs / copy JSON.
-
-### 7️⃣ Preview Tab
-
-**Source:** `ui_flows.md §9`
-
-* Reader‑style view.
-* Language fallback: bn → en → or → hi → as.
-* Commentary rendering (cards, collapsible).
-* Matches clean export view (`export/<work>.clean.json`).
-
-### 8️⃣ Attachments Tab
-
-**Source:** `ui_flows.md §10`
-
-* Simple list of reference URLs.
-* Editable, stored under `verseDraft.attachments[]`.
-* No binary uploads.
+* Simple list of reference links (strings) bound to `verseDraft.attachments[]`.
+* Add/Remove entries; no binary upload.
 
 ---
 
-## 🧱 Technical Details
+## 🧱 Technical Requirements
 
-* All tabs read/write through central `verseDraft` state (same object used by Verse tab).
-* Persist via existing Save / Save & Next logic (Axios PUT → `/works/:id/verses/:vid`).
-* Maintain CSRF + cookie session setup from previous phases.
-* UI built with Tailwind; consistent padding, rounded corners, text size, shadows.
-* Respect role gating and unsaved‑guard logic.
+* All tabs read/write via the **single** `verseDraft` object shared with Verse tab.
+* Persist using the existing Save handlers; maintain CSRF/cookie behavior.
+* Do not change keys or shapes from `docs/schema_reference.md` and `docs/api_contracts.md`.
+* Role gating: Author can edit and submit; Reviewer can approve/reject/flag; Final can lock. Buttons disabled when role is insufficient.
 
 ---
 
 ## ✅ Acceptance Criteria
 
-* All 8 tabs are **fully functional** — no placeholder text remains.
-* Save updates correct JSON paths on backend and validates against schema.
-* Review actions perform correct transitions and append to history.
-* Commentary fetches and displays actual entries.
-* Preview and Attachments show live data.
-* Autosave and connection chip remain stable.
-* Build passes (`npm run build`).
-* Backend pytest suite passes for CRUD and review transitions.
+* No placeholders remain; each tab is usable and persists to backend.
+* Saved verse JSON includes complete `texts`, `segments`, `origin`, `tags`, `hash`, `review`, and `attachments` as specified.
+* Review transitions call backend endpoints and append to `review.history`.
+* Commentary list displays real items and supports create/duplicate.
+* Preview reflects the same content the clean export would show.
+* Autosave, navigator, and palette remain fully functional.
+* Frontend build passes.
 
 ---
 
 ## 🧪 Testing Checklist
 
-* Open each tab → edit fields → click Save → verify updates in corresponding JSON files.
-* Run `/build/merge` to confirm merged output includes all verse fields.
-* Approve / Reject / Flag → check history entries update.
-* Commentary Add / Duplicate → creates valid files in `commentary/<verse_id>/`.
-* Validate clean export redacts review data properly.
-* UI responsive on mobile and desktop.
-* No console or network errors.
+* Edit each tab → Save → verify corresponding fields in `data/library/<work_id>/verses/<V####>.json`.
+* Validate/Approve/Reject/Flag/Lock → confirm state changes and history entries.
+* Add a commentary note → verify it is created and linked; duplicate to another verse.
+* Switch works and verses; ensure no stale state or missing fields.
+* `npm run build` passes; backend tests for transitions stay green.
 
 ---
 
-## 🗂 Files to Modify
+## 🗂 Scope of Changes (no new files unless essential)
 
-* `frontend/src/tabs/*Tab.tsx` (Translations, Segments, Origin, Commentary, Review, History, Preview, Attachments)
-* `frontend/src/context/AuthContext.tsx` (ensure role gating remains)
-* `frontend/src/components/HeaderBar.tsx` (review action buttons)
-* Backend FastAPI routes remain unchanged unless field wiring requires patch.
+* Replace placeholders in existing `*Tab` components (Translations, Segments, Origin, Commentary, Review, History, Preview, Attachments).
+* Reuse current hooks, state, and save handlers.
+* Add a minimal commentary list endpoint **only if necessary**, mirroring established API style.
 
 ---
 
-## 🧾 Notes
+## ☑️ House Rules
 
-* Do not rename existing files; replace placeholders in place.
-* Strictly adhere to schema key names from `schema_reference.md`.
-* Continue to version logs and QA entries after completion.
-* Once P4b passes QA, proceed to **P5 — Build & Export UI**, then **P5a — Admin & Role Management**.
+* Keep UI labels and copy consistent with `docs/ui_flows.md`.
+* Do not introduce new state containers; extend the existing draft flow.
+* Maintain responsiveness and a11y parity with Verse tab.
+* Log any deviations in Change Log after completion.
+
 
 
 ## P5 — Build & Export UI

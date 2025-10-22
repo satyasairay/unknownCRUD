@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
 import { VerseDraft } from "../lib/types";
 
 const REQUIRED_LANG_CODES = ["bn", "en", "or", "hi", "as"] as const;
@@ -118,7 +118,7 @@ export function VerseTab({
     onTagsChange(draft.tags.filter((item) => item !== tag));
   };
 
-  const handleTagKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+  const handleTagKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     const { key } = event;
     if (
       TAG_DELIMITERS.has(key) ||

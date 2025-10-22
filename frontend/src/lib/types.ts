@@ -36,6 +36,7 @@ export interface VerseDraft {
   tags: string[];
   origin: OriginEntry[];
   status: ReviewState;
+  reviewRequired: string[];
   commentary: CommentaryEntry[];
   history: ReviewHistoryEntry[];
   attachments: AttachmentRef[];
@@ -75,9 +76,12 @@ export interface VerseListItem {
 
 export interface CommentaryEntry {
   commentary_id: string;
+  work_id?: string | null;
   verse_id?: string | null;
+  targets?: { kind: string; ids: string[] }[];
   speaker?: string | null;
   source?: string | null;
+  date?: { iso?: string | null };
   genre?: string | null;
   tags?: string[];
   texts: Record<string, string | null>;
@@ -109,4 +113,14 @@ export interface ReviewHistoryEntry {
   from?: string | null;
   to?: string | null;
   issues?: ReviewHistoryIssue[];
+}
+
+export interface CommentaryFormData {
+  speaker?: string | null;
+  source?: string | null;
+  genre?: string | null;
+  tags: string[];
+  texts: Record<string, string>;
+  targets?: { kind: string; ids: string[] }[];
+  date?: { iso?: string | null };
 }
