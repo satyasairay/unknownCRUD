@@ -17,5 +17,8 @@ uvicorn==0.24.0
 pytest==8.4.2
 httpx==0.24.1
 
+# Environment management
+python-dotenv==1.0.0
+
 # Development tools (optional - can be removed for production)
 # ruff @ file:///C:/Users/User/Downloads/ruff-0.14.1-py3-none-win_amd64.whl#sha256=59d599cdff9c7f925a017f6f2c256c908b094e55967f93f2821b1439928746a1
