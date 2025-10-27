@@ -39,9 +39,9 @@ cat ~/.ssh/id_rsa
 ```
 
 ### 4. Update Configuration Files
-- Replace `your-domain.com` in `nginx.conf` with your actual domain
-- Update `VITE_API_BASE` in `frontend/.env.production` with your domain
-- Update `ALLOWED_ORIGINS` in `backend_py/app.py` with your domain
+- Domain configured as `satsangee.org`
+- Frontend will connect to `https://satsangee.org/api`
+- CORS allows requests from `https://satsangee.org`
 
 ### 5. Deploy
 ```bash

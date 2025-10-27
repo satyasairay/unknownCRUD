@@ -103,8 +103,8 @@ csrf_token = secrets.token_urlsafe(32)
 
 ALLOWED_ORIGINS = [
     "http://localhost:3000",
-    "https://your-domain.com",
-    "http://your-domain.com"
+    "https://satsangee.org",
+    "http://satsangee.org"
 ]
 SESSION_COOKIE_NAME = "session_id"
 SESSION_COOKIE_PARAMS = {
