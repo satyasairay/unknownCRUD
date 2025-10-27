@@ -6,8 +6,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple
 
-from . import settings
-from .models import Commentary, User, Verse, Work
+import settings
+from models import Commentary, User, Verse, Work
 
 WORK_JSON = "work.json"
 VERSES_DIR = "verses"

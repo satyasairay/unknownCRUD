@@ -10,8 +10,8 @@ from fastapi import Cookie, Depends, FastAPI, HTTPException, Query, Response, st
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, EmailStr, Field
 
-from . import storage
-from .models import (
+import storage
+from models import (
     Commentary,
     OriginEntry,
     ReviewBlock,
@@ -101,7 +101,11 @@ class ExportResponse(BaseModel):
 sessions: Dict[str, str] = {}
 csrf_token = secrets.token_urlsafe(32)
 
-ALLOWED_ORIGINS = ["http://localhost:5173"]
+ALLOWED_ORIGINS = [
+    "http://localhost:3000",
+    "https://your-domain.com",
+    "http://your-domain.com"
+]
 SESSION_COOKIE_NAME = "session_id"
 SESSION_COOKIE_PARAMS = {
     "httponly": True,
