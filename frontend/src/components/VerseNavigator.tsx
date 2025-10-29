@@ -60,9 +60,9 @@ export function VerseNavigator({
   };
 
   return (
-    <aside className="w-full max-h-[calc(100vh-12rem)] overflow-y-auto rounded-xl border border-slate-800 bg-slate-900/70 p-4 text-sm text-slate-200 shadow-inner shadow-black/30 lg:w-72">
-      <div className="mb-4 flex items-center justify-between">
-        <h3 className="text-base font-semibold text-slate-100">Verses</h3>
+    <aside className="w-full max-h-[calc(100vh-16rem)] overflow-y-auto rounded-xl border border-slate-800 bg-slate-900/70 p-3 text-sm text-slate-200 shadow-inner shadow-black/30 sm:p-4 lg:w-72 lg:max-h-[calc(100vh-12rem)]">
+      <div className="mb-3 flex items-center justify-between sm:mb-4">
+        <h3 className="text-sm font-semibold text-slate-100 sm:text-base">Verses</h3>
         <button
           type="button"
           onClick={onCreateNew}
@@ -72,7 +72,7 @@ export function VerseNavigator({
         </button>
       </div>
 
-      <form onSubmit={handleSubmit} className="mb-4">
+      <form onSubmit={handleSubmit} className="mb-3 sm:mb-4">
         <label className="sr-only" htmlFor="verse-search">
           Search verses
         </label>
@@ -82,7 +82,7 @@ export function VerseNavigator({
           placeholder="Search verse…"
           value={localSearch}
           onChange={(event) => setLocalSearch(event.target.value)}
-          className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm focus:border-brand focus:outline-none"
+          className="w-full rounded-md border border-slate-700 bg-slate-950 px-2 py-1.5 text-sm focus:border-brand focus:outline-none sm:px-3 sm:py-2"
         />
       </form>
 
@@ -91,7 +91,7 @@ export function VerseNavigator({
         {loading && <span className="text-brand-light">Loading…</span>}
       </div>
 
-      <ul className="space-y-2">
+      <ul className="space-y-1.5 sm:space-y-2">
         {items.map((item) => {
           const isActive = item.verse_id === selectedVerseId;
           const state = item.review?.state ?? "draft";
@@ -100,18 +100,18 @@ export function VerseNavigator({
               <button
                 type="button"
                 onClick={() => onSelect(item.verse_id)}
-                className={`w-full rounded-lg border px-3 py-2 text-left transition ${
+                className={`w-full rounded-lg border px-2 py-1.5 text-left transition sm:px-3 sm:py-2 ${
                   isActive
                     ? "border-brand bg-brand/10 text-white"
                     : "border-slate-800 bg-slate-900/60 text-slate-200 hover:border-brand/60 hover:bg-slate-900"
                 }`}
               >
                 <div className="flex items-center justify-between text-xs">
-                  <span className="font-semibold">
+                  <span className="font-semibold truncate pr-2">
                     {item.number_manual ?? item.verse_id}
                   </span>
                   <span
-                    className={`rounded-full px-2 py-0.5 text-[10px] uppercase ${STATE_COLORS[state]}`}
+                    className={`rounded-full px-1.5 py-0.5 text-[10px] uppercase flex-shrink-0 ${STATE_COLORS[state]}`}
                   >
                     {state.replace("_", " ")}
                   </span>
@@ -132,7 +132,7 @@ export function VerseNavigator({
         )}
       </ul>
 
-      <div className="mt-4 flex items-center justify-between">
+      <div className="mt-3 flex items-center justify-between sm:mt-4">
         <button
           type="button"
           onClick={() => onPageChange(Math.max(offset - limit, 0))}

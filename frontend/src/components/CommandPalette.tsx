@@ -62,13 +62,13 @@ export function CommandPalette({
   }
 
   return (
-    <div className="fixed inset-0 z-40 flex items-start justify-center bg-black/60 px-4 py-20 backdrop-blur">
-      <div className="w-full max-w-xl rounded-2xl border border-slate-800 bg-slate-950 shadow-2xl shadow-black/70">
-        <div className="flex items-center gap-2 border-b border-slate-800 px-4 py-3">
+    <div className="fixed inset-0 z-40 flex items-start justify-center bg-black/60 px-3 py-12 backdrop-blur sm:px-4 sm:py-20">
+      <div className="w-full max-w-xl rounded-xl border border-slate-800 bg-slate-950 shadow-2xl shadow-black/70 sm:rounded-2xl">
+        <div className="flex items-center gap-2 border-b border-slate-800 px-3 py-2.5 sm:px-4 sm:py-3">
           <div className="text-xs uppercase tracking-wide text-slate-500">Jump to verse</div>
           <span className="ml-auto text-xs text-slate-500">{loading ? "Loading…" : `${items.length} result(s)`}</span>
         </div>
-        <div className="px-4 py-3">
+        <div className="px-3 py-2.5 sm:px-4 sm:py-3">
           <input
             ref={inputRef}
             type="search"
@@ -91,10 +91,10 @@ export function CommandPalette({
               }
             }}
             placeholder="Type to search verses…"
-            className="w-full rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 focus:border-brand focus:outline-none"
+            className="w-full rounded-md border border-slate-700 bg-slate-900 px-2.5 py-1.5 text-sm text-slate-100 focus:border-brand focus:outline-none sm:px-3 sm:py-2"
           />
         </div>
-        <ul className="max-h-64 overflow-y-auto px-2 pb-3">
+        <ul className="max-h-64 overflow-y-auto px-1.5 pb-2.5 sm:max-h-80 sm:px-2 sm:pb-3">
           {visibleItems.map((item, index) => {
             const isActive = index === activeIndex;
             return (
@@ -105,17 +105,17 @@ export function CommandPalette({
                     onSelect(item.verse_id);
                     onClose();
                   }}
-                  className={`flex w-full flex-col rounded-lg border px-3 py-2 text-left transition ${
+                  className={`flex w-full flex-col rounded-lg border px-2.5 py-1.5 text-left transition sm:px-3 sm:py-2 ${
                     isActive
                       ? "border-brand bg-brand/10 text-white"
                       : "border-transparent bg-slate-900/40 text-slate-200 hover:border-brand/40 hover:bg-slate-900/70"
                   }`}
                 >
                   <div className="flex items-center justify-between text-xs">
-                    <span className="font-semibold">
+                    <span className="font-semibold truncate pr-2">
                       {item.number_manual ?? item.verse_id}
                     </span>
-                    <span className="text-[10px] uppercase text-slate-400">
+                    <span className="text-[10px] uppercase text-slate-400 flex-shrink-0">
                       {item.review?.state ?? "draft"}
                     </span>
                   </div>
