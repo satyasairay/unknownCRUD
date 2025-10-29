@@ -80,10 +80,10 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
   };
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/70 px-4">
-      <div className="w-full max-w-md rounded-xl border border-slate-800 bg-slate-900 shadow-2xl">
-        <header className="flex items-center justify-between border-b border-slate-800 px-6 py-4">
-          <h3 className="text-lg font-semibold text-slate-100">
+    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/70 px-3 sm:px-4">
+      <div className="w-full max-w-md rounded-lg border border-slate-800 bg-slate-900 shadow-2xl sm:rounded-xl">
+        <header className="flex items-center justify-between border-b border-slate-800 px-4 py-3 sm:px-6 sm:py-4">
+          <h3 className="text-base font-semibold text-slate-100 sm:text-lg">
             {tab === "login" ? "Sign In" : "Create Account"}
           </h3>
           <button
@@ -95,7 +95,7 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
           </button>
         </header>
 
-        <nav className="flex gap-1 border-b border-slate-800 px-6">
+        <nav className="flex gap-0.5 border-b border-slate-800 px-4 sm:gap-1 sm:px-6">
           <TabButton
             label="Login"
             active={tab === "login"}
@@ -114,7 +114,7 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
           />
         </nav>
 
-        <form className="px-6 py-6" onSubmit={handleSubmit}>
+        <form className="px-4 py-4 sm:px-6 sm:py-6" onSubmit={handleSubmit}>
           <div className="flex flex-col gap-4">
             <div>
               <label className="block text-sm font-medium text-slate-200">
@@ -154,7 +154,7 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
                 <span className="block text-sm font-medium text-slate-200">
                   Roles
                 </span>
-                <div className="mt-2 grid gap-2">
+                <div className="mt-2 grid gap-1.5 sm:gap-2">
                   {ROLE_OPTIONS.map((role) => (
                     <label
                       key={role.value}
@@ -183,18 +183,18 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
             )}
           </div>
 
-          <div className="mt-6 flex items-center justify-between">
+          <div className="mt-4 flex flex-col gap-2 sm:mt-6 sm:flex-row sm:items-center sm:justify-between sm:gap-0">
             <button
               type="button"
               onClick={closeModal}
-              className="rounded-md border border-slate-700 px-4 py-2 text-sm text-slate-300 transition hover:border-slate-500 hover:text-white"
+              className="order-2 rounded-md border border-slate-700 px-4 py-2 text-sm text-slate-300 transition hover:border-slate-500 hover:text-white sm:order-1"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={submitting || !isPasswordValid}
-              className="rounded-md bg-brand px-5 py-2 text-sm font-semibold text-white transition hover:bg-brand-light disabled:cursor-not-allowed disabled:bg-slate-700"
+              className="order-1 rounded-md bg-brand px-5 py-2 text-sm font-semibold text-white transition hover:bg-brand-light disabled:cursor-not-allowed disabled:bg-slate-700 sm:order-2"
             >
               {submitting
                 ? "Submitting…"

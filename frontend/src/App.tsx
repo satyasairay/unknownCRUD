@@ -944,11 +944,11 @@ export default function App() {
         canLock={!isReviewProcessing && canLock}
       />
 
-      <main className="mx-auto max-w-7xl px-6">
+      <main className="mx-auto max-w-7xl px-4 sm:px-6">
         {bannerMessage && (
-          <div className="mt-6 rounded-md border border-slate-700 bg-slate-900 px-4 py-3 text-sm text-slate-200">
+          <div className="mt-4 rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200 sm:mt-6 sm:px-4 sm:py-3">
             <div className="flex items-center justify-between">
-              <span>{bannerMessage}</span>
+              <span className="pr-2">{bannerMessage}</span>
               <button
                 type="button"
                 className="text-xs text-slate-400 hover:text-white"
@@ -960,7 +960,7 @@ export default function App() {
           </div>
         )}
 
-        <div className="mt-6 flex flex-col gap-6 lg:flex-row">
+        <div className="mt-4 flex flex-col gap-4 sm:mt-6 sm:gap-6 lg:flex-row">
           <VerseNavigator
             items={verseList}
             loading={listLoading}
@@ -975,7 +975,7 @@ export default function App() {
             onCreateNew={() => handleVerseSelect(null)}
           />
 
-          <div className="flex-1">
+          <div className="flex-1 min-w-0">
             <EditorModal
               title={
                 workDetail
