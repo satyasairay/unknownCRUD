@@ -81,7 +81,12 @@ jobs:
           # Setup data directory and scripts
           sudo mkdir -p /var/www/html/data/library
           sudo mkdir -p /var/www/html/scripts
-          sudo cp -r data/library/* /var/www/html/data/library/ || true
+          # Copy all data files including _users.json
+          sudo cp -r data/library/* /var/www/html/data/library/ 2>/dev/null || echo "No data files to copy"
+          # Ensure _users.json exists
+          if [ ! -f /var/www/html/data/library/_users.json ]; then
+            echo '[]' | sudo tee /var/www/html/data/library/_users.json
+          fi
           sudo cp scripts/init-production.py /var/www/html/scripts/
           
           # Initialize production environment
