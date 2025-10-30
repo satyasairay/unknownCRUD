@@ -28,7 +28,6 @@ interface HeaderBarProps {
   lastSavedAt: string | null;
   connection: ConnectionState;
   userEmail: string | null;
-  onLoginClick: () => void;
   onLogoutClick: () => void;
   onSave: () => void;
   onSaveNext: () => void;
@@ -53,7 +52,6 @@ export function HeaderBar({
   lastSavedAt,
   connection,
   userEmail,
-  onLoginClick,
   onLogoutClick,
   onSave,
   onSaveNext,
@@ -154,7 +152,6 @@ export function HeaderBar({
 
             <AuthControls
               userEmail={userEmail}
-              onLoginClick={onLoginClick}
               onLogoutClick={onLogoutClick}
             />
 
@@ -296,37 +293,39 @@ function ConnectionChip({ connection }: { connection: ConnectionState }) {
 
 function AuthControls({
   userEmail,
-  onLoginClick,
   onLogoutClick,
 }: {
   userEmail: string | null;
-  onLoginClick: () => void;
   onLogoutClick: () => void;
 }) {
-  if (userEmail) {
-    return (
-      <div className="flex items-center gap-2 text-xs text-slate-300 sm:gap-3">
-        <span className="hidden rounded-md border border-slate-700 bg-slate-900 px-2 py-1 font-medium text-slate-100 sm:block sm:px-3">
-          {userEmail}
-        </span>
-        <button
-          type="button"
-          onClick={onLogoutClick}
-          className="rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-300 transition hover:border-rose-600 hover:text-rose-300 sm:px-3"
-        >
-          Logout
-        </button>
-      </div>
-    );
-  }
+  const getDisplayName = (email: string | null) => {
+    if (!email) return "User";
+    const username = email.split('@')[0];
+    return username.length > 8 ? username.substring(0, 8) + '...' : username;
+  };
+
+  const getInitials = (email: string | null) => {
+    if (!email) return "U";
+    const username = email.split('@')[0];
+    return username.substring(0, 2).toUpperCase();
+  };
 
   return (
-    <button
-      type="button"
-      onClick={onLoginClick}
-      className="rounded-md border border-brand/50 bg-brand/20 px-2 py-1 text-xs font-semibold text-brand-light transition hover:border-brand hover:bg-brand/30 hover:text-white sm:px-3"
-    >
-      Login
-    </button>
+    <div className="flex items-center gap-2 text-xs text-slate-300 sm:gap-3">
+      {/* Show initials on mobile, username on desktop */}
+      <span className="flex h-7 w-7 items-center justify-center rounded-full bg-brand/20 text-xs font-semibold text-brand-light sm:hidden">
+        {getInitials(userEmail)}
+      </span>
+      <span className="hidden rounded-md border border-slate-700 bg-slate-900 px-2 py-1 font-medium text-slate-100 sm:block sm:px-3" title={userEmail || undefined}>
+        {getDisplayName(userEmail)}
+      </span>
+      <button
+        type="button"
+        onClick={onLogoutClick}
+        className="rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-300 transition hover:border-rose-600 hover:text-rose-300 sm:px-3"
+      >
+        Logout
+      </button>
+    </div>
   );
 }

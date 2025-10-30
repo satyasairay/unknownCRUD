@@ -3,7 +3,7 @@ import { HeaderBar } from "./components/HeaderBar";
 import { VerseNavigator } from "./components/VerseNavigator";
 import { EditorModal, TabConfig } from "./components/EditorModal";
 import { VerseTab } from "./components/VerseTab";
-import { AuthModal } from "./components/AuthModal";
+import { HomePage } from "./components/HomePage";
 import { CommandPalette } from "./components/CommandPalette";
 import {
   AttachmentsTab,
@@ -122,7 +122,6 @@ export default function App() {
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [bannerMessage, setBannerMessage] = useState<string | null>(null);
-  const [isAuthModalOpen, setAuthModalOpen] = useState(false);
   const [isPaletteOpen, setPaletteOpen] = useState(false);
   const [paletteQuery, setPaletteQuery] = useState("");
   const [verseList, setVerseList] = useState<VerseListItem[]>([]);
@@ -138,7 +137,7 @@ export default function App() {
 
   const [isReviewProcessing, setReviewProcessing] = useState(false);
 
-  const { user, logout } = useAuth();
+  const { user, loading, logout } = useAuth();
 
   const rolePriority: Record<string, number> = {
     author: 1,
@@ -917,6 +916,23 @@ export default function App() {
     await performReviewAction("lock");
   }, [performReviewAction]);
 
+  // Show loading while checking authentication
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand mx-auto mb-4"></div>
+          <p className="text-slate-400">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Force login - show homepage if not authenticated
+  if (!user) {
+    return <HomePage />;
+  }
+
   return (
     <div className="min-h-screen bg-slate-950 pb-12">
       <HeaderBar
@@ -928,7 +944,6 @@ export default function App() {
         lastSavedAt={formattedSavedAt}
         connection={connection}
         userEmail={user?.email ?? null}
-        onLoginClick={() => setAuthModalOpen(true)}
         onLogoutClick={() => void handleLogout()}
         onSave={() => void handleSave()}
         onSaveNext={handleSaveAndNext}
@@ -1002,10 +1017,6 @@ export default function App() {
         }}
         onClose={() => setPaletteOpen(false)}
         onSelect={(verseId) => handleCommandSelect(verseId)}
-      />
-      <AuthModal
-        isOpen={isAuthModalOpen}
-        onClose={() => setAuthModalOpen(false)}
       />
     </div>
   );

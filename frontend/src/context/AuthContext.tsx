@@ -46,18 +46,36 @@ async function fetchCurrentUser(): Promise<AuthUser | null> {
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<AuthUser | null>(null);
+  const [user, setUser] = useState<AuthUser | null>(() => {
+    // Try to restore user from localStorage on initial load
+    try {
+      const stored = localStorage.getItem('auth_user');
+      return stored ? JSON.parse(stored) : null;
+    } catch {
+      return null;
+    }
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const hydrate = useCallback(async () => {
-    setLoading(true);
-    try {
-      await getCsrfToken().catch(() => null);
-      const current = await fetchCurrentUser();
-      setUser(current);
-    } finally {
+    const storedUser = localStorage.getItem('auth_user');
+    if (storedUser) {
+      // If we have stored user, use it immediately without backend verification
       setLoading(false);
+    } else {
+      // No stored user, check backend
+      setLoading(true);
+      try {
+        await getCsrfToken().catch(() => null);
+        const current = await fetchCurrentUser();
+        if (current) {
+          setUser(current);
+          localStorage.setItem('auth_user', JSON.stringify(current));
+        }
+      } finally {
+        setLoading(false);
+      }
     }
   }, []);
 
@@ -80,6 +98,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           password,
         });
         setUser(data);
+        localStorage.setItem('auth_user', JSON.stringify(data));
       } catch (error) {
         setError(formatError(error));
         throw error;
@@ -97,6 +116,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         otp,
       });
       setUser(data);
+      localStorage.setItem('auth_user', JSON.stringify(data));
     } catch (error) {
       setError(formatError(error));
       throw error;
@@ -109,12 +129,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await apiClient.post("/auth/logout");
     } finally {
       setUser(null);
+      localStorage.removeItem('auth_user');
     }
   }, []);
 
   const refresh = useCallback(async () => {
     const current = await fetchCurrentUser();
     setUser(current);
+    if (current) {
+      localStorage.setItem('auth_user', JSON.stringify(current));
+    } else {
+      localStorage.removeItem('auth_user');
+    }
   }, []);
 
   const value = useMemo<AuthContextValue>(
