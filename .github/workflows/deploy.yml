@@ -78,6 +78,16 @@ jobs:
           sudo mkdir -p /var/www/html/api
           sudo cp -r backend_py/* /var/www/html/api/
           
+          # Setup data directory and scripts
+          sudo mkdir -p /var/www/html/data/library
+          sudo mkdir -p /var/www/html/scripts
+          sudo cp -r data/library/* /var/www/html/data/library/ || true
+          sudo cp scripts/init-production.py /var/www/html/scripts/
+          
+          # Initialize production environment
+          cd /var/www/html
+          sudo -u www-data DATA_ROOT=/var/www/html/data/library python3 scripts/init-production.py
+          
           # Set permissions
           sudo chown -R www-data:www-data /var/www/html/
           sudo chmod -R 755 /var/www/html/
