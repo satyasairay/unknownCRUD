@@ -3,20 +3,28 @@ import { ReviewState, WorkSummary } from "../lib/types";
 
 const STATUS_LABELS: Record<ReviewState, string> = {
   draft: "Draft",
+  submitted: "Submitted",
   review_pending: "In Review",
-  approved: "Approved",
+  reviewer_approved: "Reviewer Approved",
+  admin_approved: "Admin Approved",
+  sme_approved: "SME Approved",
   locked: "Locked",
   rejected: "Rejected",
   flagged: "Flagged",
+  sme_rollback: "SME Rollback",
 };
 
 const STATUS_COLORS: Record<ReviewState, string> = {
   draft: "bg-slate-500 text-white",
+  submitted: "bg-blue-500 text-white",
   review_pending: "bg-amber-500 text-white",
-  approved: "bg-emerald-500 text-white",
+  reviewer_approved: "bg-green-500 text-white",
+  admin_approved: "bg-emerald-600 text-white",
+  sme_approved: "bg-emerald-700 text-white",
   locked: "bg-slate-700 text-white",
   rejected: "bg-rose-600 text-white",
   flagged: "bg-orange-600 text-white",
+  sme_rollback: "bg-purple-600 text-white",
 };
 
 interface HeaderBarProps {
@@ -29,6 +37,8 @@ interface HeaderBarProps {
   connection: ConnectionState;
   userEmail: string | null;
   onLogoutClick: () => void;
+  onAdminClick?: () => void;
+  showAdminButton?: boolean;
   onSave: () => void;
   onSaveNext: () => void;
   onValidate: () => void;
@@ -53,6 +63,8 @@ export function HeaderBar({
   connection,
   userEmail,
   onLogoutClick,
+  onAdminClick,
+  showAdminButton,
   onSave,
   onSaveNext,
   onValidate,
@@ -153,6 +165,8 @@ export function HeaderBar({
             <AuthControls
               userEmail={userEmail}
               onLogoutClick={onLogoutClick}
+              onAdminClick={onAdminClick}
+              showAdminButton={showAdminButton}
             />
 
             {/* Mobile menu button */}
@@ -294,9 +308,13 @@ function ConnectionChip({ connection }: { connection: ConnectionState }) {
 function AuthControls({
   userEmail,
   onLogoutClick,
+  onAdminClick,
+  showAdminButton,
 }: {
   userEmail: string | null;
   onLogoutClick: () => void;
+  onAdminClick?: () => void;
+  showAdminButton?: boolean;
 }) {
   const getDisplayName = (email: string | null) => {
     if (!email) return "User";
@@ -319,6 +337,9 @@ function AuthControls({
       <span className="hidden rounded-md border border-slate-700 bg-slate-900 px-2 py-1 font-medium text-slate-100 sm:block sm:px-3" title={userEmail || undefined}>
         {getDisplayName(userEmail)}
       </span>
+      
+      {/* No admin button - admins access via /admin URL directly */}
+      
       <button
         type="button"
         onClick={onLogoutClick}

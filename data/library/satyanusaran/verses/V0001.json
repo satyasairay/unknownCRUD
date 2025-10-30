@@ -7,11 +7,17 @@
   "number_generated": null,
   "texts": {
     "bn": "মানব হৃদয়ে সত্যের অনুসন্ধানেই জীবনের সার্থকতা।",
-    "en": "The fulfillment of life is the quest for truth within the human heart."
+    "en": "The fulfillment of life is the quest for truth within the human heart.",
+    "or": null,
+    "hi": null,
+    "as": null
   },
   "segments": {
     "bn": [],
-    "en": []
+    "en": [],
+    "or": [],
+    "hi": [],
+    "as": []
   },
   "origin": [
     {
@@ -31,7 +37,10 @@
   ],
   "hash": {
     "bn": null,
-    "en": null
+    "en": null,
+    "or": null,
+    "hi": null,
+    "as": null
   },
   "meta": {
     "entered_by": "seed@unknown-crud.local"
@@ -49,6 +58,46 @@
         "actor": "seed@unknown-crud.local",
         "action": "state_change",
         "from": "draft",
+        "to": "approved",
+        "issues": [],
+        "hash_before": null,
+        "hash_after": null
+      },
+      {
+        "ts": "2025-10-30T10:59:54.503161+00:00",
+        "actor": "abc@gmail.com",
+        "action": "flag",
+        "from": "approved",
+        "to": "flagged",
+        "issues": [],
+        "hash_before": null,
+        "hash_after": null
+      },
+      {
+        "ts": "2025-10-30T10:59:57.549073+00:00",
+        "actor": "abc@gmail.com",
+        "action": "flag",
+        "from": "flagged",
+        "to": "flagged",
+        "issues": [],
+        "hash_before": null,
+        "hash_after": null
+      },
+      {
+        "ts": "2025-10-30T10:59:58.699019+00:00",
+        "actor": "abc@gmail.com",
+        "action": "issue_add",
+        "from": "flagged",
+        "to": "rejected",
+        "issues": [],
+        "hash_before": null,
+        "hash_after": null
+      },
+      {
+        "ts": "2025-10-30T10:59:59.633539+00:00",
+        "actor": "abc@gmail.com",
+        "action": "state_change",
+        "from": "rejected",
         "to": "approved",
         "issues": [],
         "hash_before": null,
