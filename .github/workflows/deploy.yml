@@ -65,34 +65,40 @@ jobs:
           npm run build
           cd ..
           
-          # Setup backend
-          cd backend_py
-          python3 -m venv env
-          source env/bin/activate
-          pip install -r requirements.txt
-          cd ..
-          
-          # Deploy files
+          # Deploy files first
           sudo mkdir -p /var/www/html
           sudo cp -r frontend/dist/* /var/www/html/
           sudo mkdir -p /var/www/html/api
           sudo cp -r backend_py/* /var/www/html/api/
           
+          # Setup backend virtual environment in final location
+          cd /var/www/html/api
+          sudo python3 -m venv env
+          sudo chown -R www-data:www-data env/
+          sudo -u www-data env/bin/pip install -r requirements.txt
+          
           # Setup data directory and scripts
           sudo mkdir -p /var/www/html/data/library
           sudo mkdir -p /var/www/html/scripts
-          sudo cp -r data/library/* /var/www/html/data/library/ || true
+          # Copy all data files including _users.json
+          sudo cp -r data/library/* /var/www/html/data/library/ 2>/dev/null || echo "No data files to copy"
+          # Ensure _users.json exists
+          if [ ! -f /var/www/html/data/library/_users.json ]; then
+            echo '[]' | sudo tee /var/www/html/data/library/_users.json
+          fi
           sudo cp scripts/init-production.py /var/www/html/scripts/
+          
+          # Set permissions first
+          sudo chown -R www-data:www-data /var/www/html/
+          sudo chmod -R 755 /var/www/html/
+          sudo chmod -R 775 /var/www/html/data/
           
           # Initialize production environment
           cd /var/www/html
-          sudo -u www-data DATA_ROOT=/var/www/html/data/library python3 scripts/init-production.py
-          
-          # Set permissions
-          sudo chown -R www-data:www-data /var/www/html/
-          sudo chmod -R 755 /var/www/html/
+          sudo -u www-data DATA_ROOT=/var/www/html/data/library /var/www/html/api/env/bin/python scripts/init-production.py
           
           # Setup systemd service
+          cd /tmp/unknownCRUD
           sudo cp systemd.service /etc/systemd/system/unknown-crud.service
           sudo systemctl daemon-reload
           sudo systemctl enable unknown-crud
