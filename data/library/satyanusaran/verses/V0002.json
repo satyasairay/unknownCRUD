@@ -7,11 +7,17 @@
   "number_generated": null,
   "texts": {
     "bn": "যে প্রেম সত্যে স্থিত, সে প্রেমেই সকলের মুক্তি।",
-    "en": "Only love rooted in truth can liberate all beings."
+    "en": "Only love rooted in truth can liberate all beings.",
+    "or": null,
+    "hi": null,
+    "as": null
   },
   "segments": {
     "bn": [],
-    "en": []
+    "en": [],
+    "or": [],
+    "hi": [],
+    "as": []
   },
   "origin": [
     {
@@ -30,18 +36,32 @@
   ],
   "hash": {
     "bn": null,
-    "en": null
+    "en": null,
+    "or": null,
+    "hi": null,
+    "as": null
   },
   "meta": {
     "entered_by": "seed@unknown-crud.local"
   },
   "review": {
-    "state": "review_pending",
+    "state": "approved",
     "required_reviewers": [
       "editor",
       "linguist",
       "final"
     ],
-    "history": []
+    "history": [
+      {
+        "ts": "2025-10-30T12:03:56.855976+00:00",
+        "actor": "abc@gmail.com",
+        "action": "state_change",
+        "from": "review_pending",
+        "to": "approved",
+        "issues": [],
+        "hash_before": null,
+        "hash_after": null
+      }
+    ]
   }
 }

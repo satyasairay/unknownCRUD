@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { HeaderBar } from "./components/HeaderBar";
 import { VerseNavigator } from "./components/VerseNavigator";
 import { EditorModal, TabConfig } from "./components/EditorModal";
 import { VerseTab } from "./components/VerseTab";
 import { HomePage } from "./components/HomePage";
+import { AdminPage } from "./components/AdminPage";
+import { AdminLoginPage } from "./components/AdminLoginPage";
 import { CommandPalette } from "./components/CommandPalette";
 import {
   AttachmentsTab,
@@ -97,6 +100,7 @@ function buildInitialDraft(work: WorkDetail | null): VerseDraft {
     commentary: [],
     history: [],
     attachments: [],
+    meta: {},
   };
 }
 
@@ -111,12 +115,16 @@ function formatTimestamp(iso: string | null): string | null {
   return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
-export default function App() {
+function AppContent() {
+  const location = useLocation();
+  const navigate = useNavigate();
   const [works, setWorks] = useState<WorkSummary[]>([]);
   const [selectedWorkId, setSelectedWorkId] = useState<string>("");
   const [workDetail, setWorkDetail] = useState<WorkDetail | null>(null);
   const [verseDraft, setVerseDraft] = useState<VerseDraft>(buildInitialDraft(null));
   const [activeTab, setActiveTab] = useState<string>("verse");
+  
+  const isAdminPage = location.pathname === '/admin';
   const [isSaving, setIsSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
@@ -140,8 +148,12 @@ export default function App() {
   const { user, loading, logout } = useAuth();
 
   const rolePriority: Record<string, number> = {
-    author: 1,
+    submitter: 1,
     reviewer: 2,
+    sme: 3,
+    platform_admin: 4,
+    // Legacy role support
+    author: 1,
     final: 3,
     admin: 4,
   };
@@ -291,6 +303,7 @@ export default function App() {
           commentary: [],
           history,
           attachments: verse?.attachments ?? [],
+          meta: verse?.meta ?? {},
         });
         setDirty(false);
         setErrorMessage(null);
@@ -729,15 +742,31 @@ export default function App() {
       errors.push(`Canonical text (${canonicalLang.toUpperCase()}) is required.`);
     }
     if (!verseDraft.origin.length) {
-      errors.push("At least one origin reference is required before approval.");
+      errors.push("At least one origin reference is required before submission.");
+    }
+    if (!verseDraft.manualNumber.trim()) {
+      errors.push("Manual verse number is required.");
     }
     return errors;
-  }, [verseDraft.texts, verseDraft.origin, canonicalLang]);
+  }, [verseDraft.texts, verseDraft.origin, verseDraft.manualNumber, canonicalLang]);
 
-  const canApprove = userRoleLevel >= 2 && !!verseDraft.verseId;
-  const canReject = userRoleLevel >= 2 && !!verseDraft.verseId;
-  const canFlag = userRoleLevel >= 2 && !!verseDraft.verseId;
-  const canLock = userRoleLevel >= 3 && !!verseDraft.verseId;
+  // New permission logic based on roles and workflow
+  const isSubmitter = user?.roles?.includes("submitter") || user?.roles?.includes("author");
+  const isReviewer = user?.roles?.includes("reviewer");
+  const isSME = user?.roles?.includes("sme") || user?.roles?.includes("final");
+  const isPlatformAdmin = user?.roles?.includes("platform_admin") || user?.roles?.includes("admin");
+  
+  // Check if current user created this verse
+  const isVerseCreator = verseDraft.verseId && user?.email && 
+    verseDraft.meta?.entered_by === user.email;
+  
+  const canApprove = (isReviewer || isPlatformAdmin || isSME) && !!verseDraft.verseId && !isVerseCreator;
+  const canReject = (isReviewer || isPlatformAdmin || isSME) && !!verseDraft.verseId && !isVerseCreator;
+  const canFlag = (isReviewer || isPlatformAdmin || isSME) && !!verseDraft.verseId && !isVerseCreator;
+  const canLock = (isPlatformAdmin || isSME) && !!verseDraft.verseId;
+  
+  // Submitters can create new verses and edit drafts/rejected verses
+  const canEdit = isSubmitter;
 
   const handleValidate = useCallback(() => {
     if (validationErrors.length) {
@@ -933,6 +962,8 @@ export default function App() {
     return <HomePage />;
   }
 
+
+
   return (
     <div className="min-h-screen bg-slate-950 pb-12">
       <HeaderBar
@@ -945,6 +976,8 @@ export default function App() {
         connection={connection}
         userEmail={user?.email ?? null}
         onLogoutClick={() => void handleLogout()}
+        onAdminClick={() => navigate('/admin')}
+        showAdminButton={user?.roles?.includes("platform_admin") || user?.roles?.includes("admin")}
         onSave={() => void handleSave()}
         onSaveNext={handleSaveAndNext}
         onValidate={handleValidate}
@@ -960,6 +993,8 @@ export default function App() {
       />
 
       <main className="mx-auto max-w-7xl px-4 sm:px-6">
+
+        
         {bannerMessage && (
           <div className="mt-4 rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200 sm:mt-6 sm:px-4 sm:py-3">
             <div className="flex items-center justify-between">
@@ -1028,4 +1063,66 @@ function incrementManualNumber(current: string): string {
     return current;
   }
   return String(numeric + 1);
+}
+
+export default function App() {
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<AppContent />} />
+        <Route path="/admin" element={<AdminRoute />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </BrowserRouter>
+  );
+}
+
+function AdminRoute() {
+  const { user, loading } = useAuth();
+  const navigate = useNavigate();
+  const [adminUser, setAdminUser] = useState<{ id: string; email: string; roles: string[] } | null>(null);
+  
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand mx-auto mb-4"></div>
+          <p className="text-slate-400">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+  
+  // Check if current user is admin
+  const isCurrentUserAdmin = user?.roles?.includes("platform_admin") || user?.roles?.includes("admin");
+  
+  // Use current user if they're admin, otherwise require admin login
+  const effectiveAdminUser = isCurrentUserAdmin ? user : adminUser;
+  
+  // If no admin user logged in, show admin login
+  if (!effectiveAdminUser) {
+    return <AdminLoginPage onLogin={setAdminUser} />;
+  }
+  
+  return (
+    <div>
+      <div className="bg-slate-950 p-4">
+        <div className="flex items-center justify-between">
+          <button
+            onClick={() => navigate('/')}
+            className="rounded-md border border-slate-700 px-3 py-2 text-sm text-slate-300 transition hover:border-brand hover:text-white"
+          >
+            ← Back to Verse Editor
+          </button>
+          <div className="text-sm text-slate-400">
+            Admin: {effectiveAdminUser?.email}
+          </div>
+        </div>
+      </div>
+      <AdminPage 
+        adminUser={effectiveAdminUser} 
+        onLogout={() => setAdminUser(null)} 
+      />
+    </div>
+  );
 }

@@ -98,6 +98,41 @@ class ExportResponse(BaseModel):
     output: str
 
 
+class AdminUserCreateRequest(BaseModel):
+    email: EmailStr
+    password: str = Field(min_length=8)
+    roles: List[str] = Field(default_factory=lambda: ["submitter"])
+    enabled: bool = True
+
+
+class AdminUserUpdateRequest(BaseModel):
+    email: Optional[EmailStr] = None
+    password: Optional[str] = Field(None, min_length=8)
+    roles: Optional[List[str]] = None
+    enabled: Optional[bool] = None
+
+
+class AdminUserResponse(BaseModel):
+    id: str
+    email: EmailStr
+    roles: List[str]
+    enabled: bool = True
+    created_at: Optional[str] = None
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str = Field(min_length=8)
+
+
+class AnalyticsResponse(BaseModel):
+    total_works: int
+    total_verses: int
+    total_commentary: int
+    works_by_status: Dict[str, int]
+    recent_activity: List[Dict[str, Any]]
+
+
 sessions: Dict[str, str] = {}
 csrf_token = secrets.token_urlsafe(32)
 
@@ -110,7 +145,7 @@ SESSION_COOKIE_NAME = "session_id"
 SESSION_COOKIE_PARAMS = {
     "httponly": True,
     "secure": False,  # Use True when serving over HTTPS.
-    "samesite": "none",
+    "samesite": "lax",
     "path": "/",
     "max_age": 60 * 60 * 24,
 }
@@ -176,6 +211,27 @@ def update_user(user: User) -> None:
             users[idx] = user
             break
     storage.save_users(users)
+
+
+def delete_user_by_id(user_id: str) -> bool:
+    users = storage.load_users()
+    for idx, existing in enumerate(users):
+        if existing.id == user_id:
+            users.pop(idx)
+            storage.save_users(users)
+            return True
+    return False
+
+
+def get_user_by_id(user_id: str) -> Optional[User]:
+    for user in storage.load_users():
+        if user.id == user_id:
+            return user
+    return None
+
+
+def is_admin(user: User) -> bool:
+    return "platform_admin" in user.roles or "admin" in user.roles
 
 
 async def get_current_user(
@@ -254,6 +310,135 @@ def create_app() -> FastAPI:
     async def me(user: User = Depends(get_current_user)) -> AuthResponse:
         return serialize_user(user)
 
+    # Admin endpoints
+    @app.get("/admin/users", response_model=List[AdminUserResponse])
+    async def list_users(user: User = Depends(get_current_user)) -> List[AdminUserResponse]:
+        if not is_admin(user):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
+        users = storage.load_users()
+        return [
+            AdminUserResponse(
+                id=u.id,
+                email=u.email,
+                roles=u.roles,
+                enabled=True,  # Default since User model doesn't have enabled field
+                created_at=None
+            )
+            for u in users
+        ]
+
+    @app.post("/admin/users", response_model=AdminUserResponse, status_code=status.HTTP_201_CREATED)
+    async def create_user(payload: AdminUserCreateRequest, user: User = Depends(get_current_user)) -> AdminUserResponse:
+        if not is_admin(user):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
+        if get_user_by_email(payload.email):
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="User already exists")
+        new_user = User(
+            id=str(uuid.uuid4()),
+            email=payload.email.lower(),
+            password_hash=hash_password(payload.password),
+            roles=payload.roles,
+            twoFactorEnabled=False,
+        )
+        save_user(new_user)
+        return AdminUserResponse(
+            id=new_user.id,
+            email=new_user.email,
+            roles=new_user.roles,
+            enabled=payload.enabled,
+            created_at=None
+        )
+
+    @app.put("/admin/users/{user_id}", response_model=AdminUserResponse)
+    async def update_user_admin(
+        user_id: str, 
+        payload: AdminUserUpdateRequest, 
+        user: User = Depends(get_current_user)
+    ) -> AdminUserResponse:
+        if not is_admin(user):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
+        target_user = get_user_by_id(user_id)
+        if not target_user:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+        
+        # Check for email conflicts
+        if payload.email and payload.email.lower() != target_user.email.lower():
+            if get_user_by_email(payload.email):
+                raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already exists")
+            target_user.email = payload.email.lower()
+        
+        if payload.password:
+            target_user.password_hash = hash_password(payload.password)
+        if payload.roles is not None:
+            target_user.roles = payload.roles
+        
+        update_user(target_user)
+        return AdminUserResponse(
+            id=target_user.id,
+            email=target_user.email,
+            roles=target_user.roles,
+            enabled=payload.enabled if payload.enabled is not None else True,
+            created_at=None
+        )
+
+    @app.delete("/admin/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+    async def delete_user_admin(user_id: str, user: User = Depends(get_current_user)) -> Response:
+        if not is_admin(user):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
+        if user_id == user.id:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot delete your own account")
+        if not delete_user_by_id(user_id):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+    @app.post("/admin/change-password", status_code=status.HTTP_204_NO_CONTENT)
+    async def change_password(payload: ChangePasswordRequest, user: User = Depends(get_current_user)) -> Response:
+        if not is_admin(user):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
+        if user.password_hash != hash_password(payload.current_password):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Current password is incorrect")
+        user.password_hash = hash_password(payload.new_password)
+        update_user(user)
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+    @app.get("/admin/analytics", response_model=AnalyticsResponse)
+    async def get_analytics(user: User = Depends(get_current_user)) -> AnalyticsResponse:
+        if not is_admin(user):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
+        
+        work_ids = storage.list_work_ids()
+        total_works = len(work_ids)
+        total_verses = 0
+        total_commentary = 0
+        works_by_status = {"draft": 0, "submitted": 0, "approved": 0, "locked": 0}
+        
+        for work_id in work_ids:
+            verses = storage.list_verses(work_id)
+            commentaries = storage.list_commentary(work_id)
+            total_verses += len(verses)
+            total_commentary += len(commentaries)
+            
+            # Count verses by status
+            for verse in verses:
+                status = verse.review.state if verse.review else "draft"
+                if status in works_by_status:
+                    works_by_status[status] += 1
+        
+        # Recent activity (simplified)
+        recent_activity = [
+            {"type": "verse_created", "count": total_verses, "date": datetime.now().isoformat()},
+            {"type": "commentary_added", "count": total_commentary, "date": datetime.now().isoformat()}
+        ]
+        
+        return AnalyticsResponse(
+            total_works=total_works,
+            total_verses=total_verses,
+            total_commentary=total_commentary,
+            works_by_status=works_by_status,
+            recent_activity=recent_activity
+        )
+
+    # Regular user endpoints
     @app.get("/works")
     def list_works() -> List[Dict]:
         work_summaries: List[Dict] = []

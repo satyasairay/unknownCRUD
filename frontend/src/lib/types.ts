@@ -1,10 +1,17 @@
 export type ReviewState =
   | "draft"
+  | "submitted"
   | "review_pending"
-  | "approved"
+  | "reviewer_approved"
+  | "admin_approved"
+  | "sme_approved"
   | "locked"
   | "rejected"
-  | "flagged";
+  | "flagged"
+  | "sme_rollback";
+
+// Legacy states for backward compatibility
+export type LegacyReviewState = "approved";
 
 export interface WorkSummary {
   work_id: string;
@@ -40,6 +47,7 @@ export interface VerseDraft {
   commentary: CommentaryEntry[];
   history: ReviewHistoryEntry[];
   attachments: AttachmentRef[];
+  meta?: Record<string, string | null>;
 }
 
 export interface OriginEntry {
@@ -61,7 +69,9 @@ export interface AuthUser {
   id: string;
   email: string;
   roles: string[];
+  enabled?: boolean;
   twoFactorEnabled?: boolean;
+  created_at?: string;
 }
 
 export interface VerseListItem {

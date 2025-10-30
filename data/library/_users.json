@@ -22,7 +22,26 @@
     "email": "aggrezive.mind@gmail.com",
     "password_hash": "b62c65f9a25f5c05e1d9bf333b282afaef4465d0ed625826752530303cbc4c48",
     "roles": [
-      "author"
+      "platform_admin"
+    ],
+    "twoFactorEnabled": false
+  },
+  {
+    "id": "b27d963d-3f46-4a86-9918-3fd408442a71",
+    "email": "verse_editor.admin@gmail.com",
+    "password_hash": "06e42404ca4a22fb78a8a66086ae70e5b958a5029740f601d1a2d20f1fbb3895",
+    "roles": [
+      "platform_admin"
+    ],
+    "twoFactorEnabled": false
+  },
+  {
+    "id": "0f002105-6f59-4510-9db6-43fc5450177f",
+    "email": "abc@gmail.com",
+    "password_hash": "b62c65f9a25f5c05e1d9bf333b282afaef4465d0ed625826752530303cbc4c48",
+    "roles": [
+      "submitter",
+      "reviewer"
     ],
     "twoFactorEnabled": false
   }
