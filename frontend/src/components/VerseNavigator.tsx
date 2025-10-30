@@ -17,11 +17,15 @@ interface VerseNavigatorProps {
 
 const STATE_COLORS: Record<ReviewState, string> = {
   draft: "bg-slate-700 text-slate-100",
+  submitted: "bg-blue-500/80 text-blue-950",
   review_pending: "bg-amber-500/80 text-amber-950",
-  approved: "bg-emerald-500/80 text-emerald-950",
+  reviewer_approved: "bg-green-500/80 text-green-950",
+  admin_approved: "bg-emerald-600/80 text-emerald-950",
+  sme_approved: "bg-emerald-500/80 text-emerald-950",
   locked: "bg-slate-500/80 text-slate-100",
   rejected: "bg-rose-500/80 text-rose-50",
   flagged: "bg-orange-500/80 text-orange-950",
+  sme_rollback: "bg-purple-600/80 text-purple-950",
 };
 
 export function VerseNavigator({

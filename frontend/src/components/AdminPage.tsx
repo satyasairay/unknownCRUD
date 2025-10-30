@@ -91,7 +91,7 @@ export function AdminPage({ adminUser, onLogout }: AdminPageProps = {}) {
       setEditingUser(null);
       setError(null);
     } catch (error) {
-      setError(error);
+      setError(formatError(error));
     }
   };
 

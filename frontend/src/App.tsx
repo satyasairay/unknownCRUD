@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useNavigate } from "react-router-dom";
 import { HeaderBar } from "./components/HeaderBar";
 import { VerseNavigator } from "./components/VerseNavigator";
 import { EditorModal, TabConfig } from "./components/EditorModal";
@@ -116,7 +116,6 @@ function formatTimestamp(iso: string | null): string | null {
 }
 
 function AppContent() {
-  const location = useLocation();
   const navigate = useNavigate();
   const [works, setWorks] = useState<WorkSummary[]>([]);
   const [selectedWorkId, setSelectedWorkId] = useState<string>("");
@@ -124,7 +123,7 @@ function AppContent() {
   const [verseDraft, setVerseDraft] = useState<VerseDraft>(buildInitialDraft(null));
   const [activeTab, setActiveTab] = useState<string>("verse");
   
-  const isAdminPage = location.pathname === '/admin';
+
   const [isSaving, setIsSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
@@ -147,26 +146,9 @@ function AppContent() {
 
   const { user, loading, logout } = useAuth();
 
-  const rolePriority: Record<string, number> = {
-    submitter: 1,
-    reviewer: 2,
-    sme: 3,
-    platform_admin: 4,
-    // Legacy role support
-    author: 1,
-    final: 3,
-    admin: 4,
-  };
 
-  const userRoleLevel = useMemo(() => {
-    if (!user?.roles?.length) {
-      return 0;
-    }
-    return user.roles.reduce(
-      (max, role) => Math.max(max, rolePriority[role] ?? 1),
-      1,
-    );
-  }, [user?.roles]);
+
+
 
   const handleLogout = useCallback(async () => {
     try {
@@ -751,7 +733,7 @@ function AppContent() {
   }, [verseDraft.texts, verseDraft.origin, verseDraft.manualNumber, canonicalLang]);
 
   // New permission logic based on roles and workflow
-  const isSubmitter = user?.roles?.includes("submitter") || user?.roles?.includes("author");
+
   const isReviewer = user?.roles?.includes("reviewer");
   const isSME = user?.roles?.includes("sme") || user?.roles?.includes("final");
   const isPlatformAdmin = user?.roles?.includes("platform_admin") || user?.roles?.includes("admin");
@@ -760,13 +742,12 @@ function AppContent() {
   const isVerseCreator = verseDraft.verseId && user?.email && 
     verseDraft.meta?.entered_by === user.email;
   
-  const canApprove = (isReviewer || isPlatformAdmin || isSME) && !!verseDraft.verseId && !isVerseCreator;
-  const canReject = (isReviewer || isPlatformAdmin || isSME) && !!verseDraft.verseId && !isVerseCreator;
-  const canFlag = (isReviewer || isPlatformAdmin || isSME) && !!verseDraft.verseId && !isVerseCreator;
-  const canLock = (isPlatformAdmin || isSME) && !!verseDraft.verseId;
+  const canApprove = Boolean((isReviewer || isPlatformAdmin || isSME) && !!verseDraft.verseId && !isVerseCreator);
+  const canReject = Boolean((isReviewer || isPlatformAdmin || isSME) && !!verseDraft.verseId && !isVerseCreator);
+  const canFlag = Boolean((isReviewer || isPlatformAdmin || isSME) && !!verseDraft.verseId && !isVerseCreator);
+  const canLock = Boolean((isPlatformAdmin || isSME) && !!verseDraft.verseId);
   
-  // Submitters can create new verses and edit drafts/rejected verses
-  const canEdit = isSubmitter;
+
 
   const handleValidate = useCallback(() => {
     if (validationErrors.length) {
