@@ -133,6 +133,28 @@ class AnalyticsResponse(BaseModel):
     recent_activity: List[Dict[str, Any]]
 
 
+class SMEAnalyticsResponse(BaseModel):
+    pending_reviews: int
+    approved_by_me: int
+    rejected_by_me: int
+    flagged_items: int
+    my_recent_activity: List[Dict[str, Any]]
+    work_progress: Dict[str, Dict[str, int]]
+
+
+class BulkActionRequest(BaseModel):
+    work_id: str
+    verse_ids: List[str]
+    action: str  # approve, reject, flag, rollback
+    issues: List[ReviewHistoryIssue] = Field(default_factory=list)
+
+
+class SegmentUpdateRequest(BaseModel):
+    work_id: str
+    verse_id: str
+    segments: Dict[str, List[str]]
+
+
 sessions: Dict[str, str] = {}
 csrf_token = secrets.token_urlsafe(32)
 
@@ -232,6 +254,14 @@ def get_user_by_id(user_id: str) -> Optional[User]:
 
 def is_admin(user: User) -> bool:
     return "platform_admin" in user.roles or "admin" in user.roles
+
+
+def is_sme(user: User) -> bool:
+    return "sme" in user.roles or is_admin(user)
+
+
+def can_review(user: User) -> bool:
+    return "reviewer" in user.roles or "sme" in user.roles or is_admin(user)
 
 
 async def get_current_user(
@@ -460,12 +490,39 @@ def create_app() -> FastAPI:
         except FileNotFoundError:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Work not found")
 
+    @app.post("/works", response_model=Work, status_code=status.HTTP_201_CREATED)
+    async def create_work(payload: WorkUpdateRequest, user: User = Depends(get_current_user)) -> Work:
+        if not is_sme(user):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="SME access required")
+        
+        # Check if work already exists
+        try:
+            storage.load_work(payload.work_id)
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Work already exists")
+        except FileNotFoundError:
+            pass  # Work doesn't exist, which is what we want
+        
+        storage.save_work(payload)
+        return payload
+
     @app.put("/works/{work_id}", response_model=Work)
     async def update_work(work_id: str, payload: WorkUpdateRequest, user: User = Depends(get_current_user)) -> Work:
+        if not is_sme(user):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="SME access required")
         if payload.work_id != work_id:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Mismatched work_id")
         storage.save_work(payload)
         return payload
+
+    @app.delete("/works/{work_id}", status_code=status.HTTP_204_NO_CONTENT)
+    async def delete_work(work_id: str, user: User = Depends(get_current_user)) -> Response:
+        if not is_sme(user):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="SME access required")
+        try:
+            storage.delete_work(work_id)
+        except FileNotFoundError:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Work not found")
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     @app.get("/works/{work_id}/verses")
     def list_verses(
@@ -906,6 +963,245 @@ def create_app() -> FastAPI:
         path = storage.work_dir(payload.work_id) / "export" / f"{payload.work_id}.train.jsonl"
         _write_output(str(path), lines)
         return ExportResponse(output=str(path))
+
+    # SME Dashboard endpoints
+    @app.get("/sme/analytics", response_model=SMEAnalyticsResponse)
+    async def get_sme_analytics(user: User = Depends(get_current_user)) -> SMEAnalyticsResponse:
+        if not is_sme(user):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="SME access required")
+        
+        work_ids = storage.list_work_ids()
+        pending_reviews = 0
+        approved_by_me = 0
+        rejected_by_me = 0
+        flagged_items = 0
+        work_progress = {}
+        my_recent_activity = []
+        
+        for work_id in work_ids:
+            verses = storage.list_verses(work_id)
+            work_stats = {"draft": 0, "review_pending": 0, "approved": 0, "rejected": 0, "flagged": 0}
+            
+            for verse in verses:
+                state = verse.review.state if verse.review else "draft"
+                if state in work_stats:
+                    work_stats[state] += 1
+                
+                if state in ["review_pending", "flagged"]:
+                    pending_reviews += 1
+                if state == "flagged":
+                    flagged_items += 1
+                
+                # Check if user was involved in review
+                if verse.review and verse.review.history:
+                    for entry in verse.review.history:
+                        if entry.actor == user.email:
+                            if entry.action == "state_change" and entry.to_state == "approved":
+                                approved_by_me += 1
+                            elif entry.action in ["issue_add", "state_change"] and entry.to_state == "rejected":
+                                rejected_by_me += 1
+                            
+                            my_recent_activity.append({
+                                "type": f"verse_{entry.action}",
+                                "work_id": work_id,
+                                "verse_id": verse.verse_id,
+                                "action": entry.action,
+                                "date": entry.ts.isoformat() if hasattr(entry.ts, 'isoformat') else str(entry.ts)
+                            })
+            
+            work_progress[work_id] = work_stats
+        
+        # Sort recent activity by date
+        my_recent_activity.sort(key=lambda x: x["date"], reverse=True)
+        my_recent_activity = my_recent_activity[:20]  # Limit to 20 recent items
+        
+        return SMEAnalyticsResponse(
+            pending_reviews=pending_reviews,
+            approved_by_me=approved_by_me,
+            rejected_by_me=rejected_by_me,
+            flagged_items=flagged_items,
+            my_recent_activity=my_recent_activity,
+            work_progress=work_progress
+        )
+
+    @app.get("/sme/pending-reviews")
+    async def get_pending_reviews(
+        user: User = Depends(get_current_user),
+        work_id: Optional[str] = Query(None),
+        limit: int = Query(50, ge=1, le=100)
+    ) -> Dict[str, Any]:
+        if not is_sme(user):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="SME access required")
+        
+        pending_items = []
+        work_ids = [work_id] if work_id else storage.list_work_ids()
+        
+        for wid in work_ids:
+            try:
+                work = storage.load_work(wid)
+                verses = storage.list_verses(wid)
+                
+                for verse in verses:
+                    if verse.review and verse.review.state in ["review_pending", "flagged", "draft"]:
+                        pending_items.append({
+                            "type": "verse",
+                            "work_id": wid,
+                            "work_title": work.title,
+                            "item_id": verse.verse_id,
+                            "number_manual": verse.number_manual,
+                            "state": verse.review.state,
+                            "texts": verse.texts,
+                            "tags": verse.tags,
+                            "last_updated": verse.review.history[-1].ts.isoformat() if verse.review.history else None
+                        })
+                
+                commentaries = storage.list_commentary(wid)
+                for commentary in commentaries:
+                    if commentary.review and commentary.review.state in ["review_pending", "flagged", "draft"]:
+                        pending_items.append({
+                            "type": "commentary",
+                            "work_id": wid,
+                            "work_title": work.title,
+                            "item_id": commentary.commentary_id,
+                            "verse_id": commentary.verse_id,
+                            "state": commentary.review.state,
+                            "texts": commentary.texts,
+                            "speaker": commentary.speaker,
+                            "last_updated": commentary.review.history[-1].ts.isoformat() if commentary.review.history else None
+                        })
+            except FileNotFoundError:
+                continue
+        
+        # Sort by last updated
+        pending_items.sort(key=lambda x: x.get("last_updated", ""), reverse=True)
+        
+        return {
+            "items": pending_items[:limit],
+            "total": len(pending_items)
+        }
+
+    @app.post("/sme/bulk-action")
+    async def sme_bulk_action(
+        payload: BulkActionRequest,
+        user: User = Depends(get_current_user)
+    ) -> Dict[str, Any]:
+        if not is_sme(user):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="SME access required")
+        
+        try:
+            work = storage.load_work(payload.work_id)
+        except FileNotFoundError:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Work not found")
+        
+        results = {"success": [], "failed": []}
+        
+        for verse_id in payload.verse_ids:
+            try:
+                verse = storage.load_verse(payload.work_id, verse_id)
+                
+                if payload.action == "approve":
+                    _validate_ready_for_approval(work, verse)
+                    entry = _transition_review(verse.review, "approved", user.email, "state_change")
+                elif payload.action == "reject":
+                    entry = _transition_review(verse.review, "rejected", user.email, "issue_add", issues=payload.issues)
+                elif payload.action == "flag":
+                    entry = _transition_review(verse.review, "flagged", user.email, "flag")
+                elif payload.action == "rollback":
+                    # Rollback to previous state
+                    if verse.review.history:
+                        prev_state = "draft"
+                        for hist_entry in reversed(verse.review.history[:-1]):
+                            if hist_entry.from_state:
+                                prev_state = hist_entry.from_state
+                                break
+                        entry = _transition_review(verse.review, prev_state, user.email, "rollback")
+                    else:
+                        entry = _transition_review(verse.review, "draft", user.email, "rollback")
+                else:
+                    results["failed"].append({"verse_id": verse_id, "error": "Invalid action"})
+                    continue
+                
+                verse = _normalize_verse_model(work, verse)
+                storage.save_verse(verse)
+                storage.append_review_log("verse", payload.work_id, verse_id, _serialize_history_entry(entry))
+                results["success"].append(verse_id)
+                
+            except Exception as e:
+                results["failed"].append({"verse_id": verse_id, "error": str(e)})
+        
+        return results
+
+    @app.put("/sme/segments")
+    async def update_segments(
+        payload: SegmentUpdateRequest,
+        user: User = Depends(get_current_user)
+    ) -> Verse:
+        if not is_sme(user):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="SME access required")
+        
+        try:
+            work = storage.load_work(payload.work_id)
+            verse = storage.load_verse(payload.work_id, payload.verse_id)
+        except FileNotFoundError:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Work or verse not found")
+        
+        # Update segments
+        verse.segments = payload.segments
+        
+        # Add history entry for segment update
+        entry = ReviewHistoryEntry(
+            ts=datetime.now(timezone.utc),
+            actor=user.email,
+            action="segment_update",
+            **{"from": verse.review.state, "to": verse.review.state},
+            issues=[],
+            hash_before=None,
+            hash_after=None,
+        )
+        verse.review.history.append(entry)
+        
+        verse = _normalize_verse_model(work, verse)
+        storage.save_verse(verse)
+        storage.append_review_log("verse", payload.work_id, payload.verse_id, _serialize_history_entry(entry))
+        
+        return verse
+
+    @app.get("/sme/work-summary/{work_id}")
+    async def get_work_summary_for_sme(
+        work_id: str,
+        user: User = Depends(get_current_user)
+    ) -> Dict[str, Any]:
+        if not is_sme(user):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="SME access required")
+        
+        try:
+            work = storage.load_work(work_id)
+            verses = storage.list_verses(work_id)
+            commentaries = storage.list_commentary(work_id)
+        except FileNotFoundError:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Work not found")
+        
+        # Calculate statistics
+        verse_stats = {"draft": 0, "review_pending": 0, "approved": 0, "rejected": 0, "flagged": 0, "locked": 0}
+        commentary_stats = {"draft": 0, "review_pending": 0, "approved": 0, "rejected": 0, "flagged": 0, "locked": 0}
+        
+        for verse in verses:
+            state = verse.review.state if verse.review else "draft"
+            if state in verse_stats:
+                verse_stats[state] += 1
+        
+        for commentary in commentaries:
+            state = commentary.review.state if commentary.review else "draft"
+            if state in commentary_stats:
+                commentary_stats[state] += 1
+        
+        return {
+            "work": work.dict(by_alias=True),
+            "verse_stats": verse_stats,
+            "commentary_stats": commentary_stats,
+            "total_verses": len(verses),
+            "total_commentary": len(commentaries)
+        }
 
     return app
 

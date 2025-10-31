@@ -7,6 +7,8 @@ import { VerseTab } from "./components/VerseTab";
 import { HomePage } from "./components/HomePage";
 import { AdminPage } from "./components/AdminPage";
 import { AdminLoginPage } from "./components/AdminLoginPage";
+import { SMEDashboard } from "./components/SMEDashboard";
+import { SMELoginPage } from "./components/SMELoginPage";
 import { CommandPalette } from "./components/CommandPalette";
 import {
   AttachmentsTab,
@@ -1052,6 +1054,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<AppContent />} />
         <Route path="/admin" element={<AdminRoute />} />
+        <Route path="/sme" element={<SMERoute />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
@@ -1104,6 +1107,63 @@ function AdminRoute() {
         adminUser={effectiveAdminUser} 
         onLogout={() => setAdminUser(null)} 
       />
+    </div>
+  );
+}
+
+function SMERoute() {
+  const { user, loading } = useAuth();
+  const navigate = useNavigate();
+  const [smeUser, setSmeUser] = useState<{ id: string; email: string; roles: string[] } | null>(null);
+  
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand mx-auto mb-4"></div>
+          <p className="text-slate-400">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+  
+  // Check if current user is SME
+  const isCurrentUserSME = user?.roles?.includes("sme") || user?.roles?.includes("platform_admin") || user?.roles?.includes("admin");
+  
+  // Use current user if they're SME, otherwise require SME login
+  const effectiveSMEUser = isCurrentUserSME ? user : smeUser;
+  
+  // If no SME user logged in, show SME login
+  if (!effectiveSMEUser) {
+    return <SMELoginPage onLogin={setSmeUser} />;
+  }
+  
+  return (
+    <div>
+      <div className="bg-slate-950 p-4">
+        <div className="flex items-center justify-between">
+          <button
+            onClick={() => navigate('/')}
+            className="rounded-md border border-slate-700 px-3 py-2 text-sm text-slate-300 transition hover:border-brand hover:text-white"
+          >
+            ← Back to Verse Editor
+          </button>
+          <div className="flex items-center gap-4">
+            <div className="text-sm text-slate-400">
+              SME: {effectiveSMEUser?.email}
+            </div>
+            {!isCurrentUserSME && (
+              <button
+                onClick={() => setSmeUser(null)}
+                className="rounded-md border border-slate-700 px-3 py-2 text-sm text-slate-300 transition hover:border-rose-600 hover:text-rose-300"
+              >
+                Logout
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+      <SMEDashboard user={effectiveSMEUser} />
     </div>
   );
 }
