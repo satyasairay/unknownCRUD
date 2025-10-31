@@ -264,6 +264,33 @@ def save_users(users: List[User]) -> None:
     write_json(users_path(), [user.dict(by_alias=True) for user in users])
 
 
+def delete_work(work_id: str) -> None:
+    work_path_file = work_path(work_id)
+    work_directory = work_dir(work_id)
+    
+    if not work_directory.exists():
+        raise FileNotFoundError(f"Work {work_id} not found")
+    
+    # Move entire work directory to trash
+    trash_dir = settings.DATA_ROOT / "trash" / "works" / work_id
+    trash_dir.parent.mkdir(parents=True, exist_ok=True)
+    
+    # Move the work directory
+    import shutil
+    shutil.move(str(work_directory), str(trash_dir))
+    
+    # Create tombstone
+    tombstone = {
+        "type": "work",
+        "work_id": work_id,
+        "deleted_at": datetime.now(timezone.utc).isoformat(),
+        "original_path": work_id,
+        "trashed_path": f"trash/works/{work_id}",
+    }
+    tombstone_path = settings.DATA_ROOT / "trash" / "tombstones" / "works" / f"{work_id}.json"
+    write_json(tombstone_path, tombstone)
+
+
 def append_review_log(kind: str, work_id: str, identifier: str, payload: Dict) -> None:
     REVIEW_LOG_DIR.mkdir(parents=True, exist_ok=True)
     date_key = datetime.now(timezone.utc).strftime("%Y-%m-%d")
