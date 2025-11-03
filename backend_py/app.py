@@ -160,8 +160,8 @@ csrf_token = secrets.token_urlsafe(32)
 
 ALLOWED_ORIGINS = [
     "http://localhost:3000",
-    "https://pravati.org",
-    "http://pravati.org"
+    "https://prabhati.org",
+    "http://prabhati.org"
 ]
 SESSION_COOKIE_NAME = "session_id"
 SESSION_COOKIE_PARAMS = {

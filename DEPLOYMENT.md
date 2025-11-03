@@ -39,9 +39,9 @@ cat ~/.ssh/id_rsa
 ```
 
 ### 4. Update Configuration Files
-- Domain configured as `pravati.org`
-- Frontend will connect to `https://pravati.org/api`
-- CORS allows requests from `https://pravati.org`
+- Domain configured as `prabhati.org`
+- Frontend will connect to `https://prabhati.org/api`
+- CORS allows requests from `https://prabhati.org`
 
 ### 5. Deploy
 ```bash
