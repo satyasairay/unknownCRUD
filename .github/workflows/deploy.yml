@@ -65,11 +65,14 @@ jobs:
           npm run build
           cd ..
           
-          # Deploy files first
+          # Deploy files first (exclude documentation)
           sudo mkdir -p /var/www/html
           sudo cp -r frontend/dist/* /var/www/html/
           sudo mkdir -p /var/www/html/api
+          
+          # Copy backend files excluding documentation
           sudo cp -r backend_py/* /var/www/html/api/
+          sudo rm -f /var/www/html/api/*.md 2>/dev/null || true
           
           # Setup backend virtual environment in final location
           cd /var/www/html/api

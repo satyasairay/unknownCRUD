@@ -5,13 +5,13 @@
 ### Frontend (TypeScript/React)
 - ✅ All `.tsx` files present, no conflicting `.js` files
 - ✅ `vite.config.ts` configured for port 3000
-- ✅ `.env.production` set to `https://satsangee.org/api`
+- ✅ `.env.production` set to `https://pravati.org/api`
 - ✅ Build script: `tsc && vite build`
 - ✅ TypeScript strict mode enabled
 
 ### Backend (Python/FastAPI)
 - ✅ `main.py` production entry point
-- ✅ CORS configured for `satsangee.org`
+- ✅ CORS configured for `pravati.org`
 - ✅ Environment loading with python-dotenv
 - ✅ All imports fixed (absolute imports)
 - ✅ Port 8000 configuration
@@ -70,9 +70,9 @@ sudo systemctl restart nginx
 ```
 
 ## 🌐 DOMAIN CONFIGURATION
-- Domain: `satsangee.org`
-- Frontend: `https://satsangee.org/`
-- API: `https://satsangee.org/api`
+- Domain: `pravati.org`
+- Frontend: `https://pravati.org/`
+- API: `https://pravati.org/api`
 - DNS: Point A records to VPS IP
 
 ## ✅ FINAL STATUS: DEPLOYMENT READY! 🚀
