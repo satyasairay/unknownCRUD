@@ -70,9 +70,9 @@ sudo systemctl enable unknowncrud
 echo "✅ Redeployment complete!"
 echo "🔗 Testing URLs:"
 sleep 3
-curl -I https://satsangee.org/ || echo "Frontend not responding"
-curl -I https://satsangee.org/sme || echo "SME route not responding"
-curl -I https://satsangee.org/api/health || echo "Backend may still be starting..."
+curl -I https://pravati.org/ || echo "Frontend not responding"
+curl -I https://pravati.org/sme || echo "SME route not responding"
+curl -I https://pravati.org/api/health || echo "Backend may still be starting..."
 
 echo "📋 Services status:"
 sudo systemctl status nginx --no-pager -l
